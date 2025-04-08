@@ -1,0 +1,30 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="my_textured_model">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://cube/meshes/cube.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://cube/meshes/textures/</uri>
+            <!-- The following name should match one of your texture files -->
+            <name>{texture_file}</name>
+          </script>
+        </material>
+      </visual>
+      <!-- Optionally, define a collision element similar to the visual -->
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://cube/meshes/cube.dae</uri>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
