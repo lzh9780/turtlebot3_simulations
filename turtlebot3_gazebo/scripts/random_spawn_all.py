@@ -5,6 +5,7 @@ import random
 import os
 from gazebo_msgs.srv import SpawnModel
 from geometry_msgs.msg import Pose, Point, Quaternion
+import rospkg
 
 def spawn_random_textured_model():
     # Initialize the ROS node
@@ -31,7 +32,9 @@ def spawn_random_textured_model():
     # List of three object ranges. Each range shows as [min_x, min_y, max_x, max_y]
     pose_range_list = [[1.05, -1.95, 1.95, -1.3], [-1.95, -1.95, -1.05, -0.55], [-1.95, 0.55, -1.05, 1.95]]
     
-    sdf_path = "~/turtlebot3_ws/src/turtlebot3_simulations/turtlebot3_gazebo/models/cube/model.sdf"
+    rospack = rospkg.RosPack()
+    sdf_path=os.path.expanduser(rospack.get_path('turtlebot3_gazebo'))
+    sdf_path = os.path.join(rospack.get_path('turtlebot3_gazebo'), "models", "cube", "model.sdf")
 
     counter = 0
     for n in target_list:
