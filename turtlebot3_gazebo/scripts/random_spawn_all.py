@@ -31,7 +31,7 @@ def spawn_random_textured_model():
     # List of three object ranges. Each range shows as [min_x, min_y, max_x, max_y]
     pose_range_list = [[1.05, -1.95, 1.95, -1.3], [-1.95, -1.95, -1.05, -0.55], [-1.95, 0.55, -1.05, 1.95]]
     
-    sdf_path = "/home/lzh/turtlebot3_ws/src/turtlebot3_simulations/turtlebot3_gazebo/models/cube/model.sdf"
+    sdf_path = "~/turtlebot3_ws/src/turtlebot3_simulations/turtlebot3_gazebo/models/cube/model.sdf"
 
     counter = 0
     for n in target_list:
