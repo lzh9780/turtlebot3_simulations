@@ -26,5 +26,6 @@
         </inertia>
       </inertial>
     </link>
+    <pose>0 0 0 0 0 -1.57</pose>
   </model>
 </sdf>

@@ -12,6 +12,7 @@ add_compile_options(-std=c++11)
 # Find catkin packages and libraries for catkin and system dependencies
 ################################################################################
 find_package(catkin REQUIRED COMPONENTS
+  rospy
   roscpp
   std_msgs
   sensor_msgs
@@ -62,6 +63,13 @@ target_link_libraries(turtlebot3_drive ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 ################################################################################
 # Install
 ################################################################################
+catkin_install_python(
+  PROGRAMS
+    scripts/random_spawn_single.py
+    scripts/random_spawn_all.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 install(TARGETS turtlebot3_drive
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
