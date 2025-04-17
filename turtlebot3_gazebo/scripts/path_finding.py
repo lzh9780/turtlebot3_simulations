@@ -1,12 +1,11 @@
 import os
-import rospy
 import rospkg
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from Astar import AStar
 import plotting
-import time
+import math
 
 def load_cost_map():
     rospack = rospkg.RosPack()
@@ -37,7 +36,7 @@ def load_cost_map():
                         else:
                             cost[i+n][j+m] = 0
     
-    # cost = cost.reshape(40, 5, 40, 5).mean(axis=(1, 3))
+    # cost = cost.reshape(100, 2, 100, 2).mean(axis=(1, 3))
     # cost = (cost > 0.7).astype(int)
     # plt.imshow(cost, cmap='gray', vmin=0, vmax=1)
     # plt.show()
@@ -57,24 +56,42 @@ def get_obs():
     
     return obs
 
-def main():
-    obs = get_obs()
-    
+def path_generate():
     def coord_trans(x, y):
         return (round((y + 2) * 50), round((x + 2) * 50))
     
     s_start = coord_trans(-1.6, 0)
-    s_goal = coord_trans(1.5, 1.5)
-    plot = plotting.Plotting(s_start, s_goal)
-    plot.obs = obs
+    s_goal = coord_trans(-1.5, -1.5)
+    # plot = plotting.Plotting(s_start, s_goal)
+    # plot.obs = obs
     
     astar = AStar(s_start, s_goal, "euclidean")
-    astar.obs = obs
-    
+    astar.obs = get_obs()
     path, visited = astar.searching()
-    print(path)
-    plot.animation(path, visited, "A*")
+    # print(path)
+    # plot.animation(path, visited, "A*")
+    
+    path = path[::-1]
+    action = [] # store the distance and yaw
+    direction = [0, 0]
+    start_pont = [path[0][0], path[0][1]]
+    for c in range(len(path)-1):
+        new_direction = [path[c+1][0] - path[c][0], path[c+1][1] - path[c][1]]
+        if new_direction == direction:
+            pass
+        else: 
+            if c != 0:
+                distance = math.sqrt((path[c][0] - start_pont[0]) ** 2 + (path[c][1] - start_pont[1]) ** 2)
+                yaw = math.atan2(path[c][0] - start_pont[0], path[c][1] - start_pont[1])
+                action.append((round(distance / 50, 2), round(yaw, 2)))
+            direction = new_direction
+            start_pont = path[c]
+        
+    # print(action)
+    # plot.animation(path, visited, "A*")
+    
+    return action
 
 
 if __name__ == '__main__':
-    main()
+    path_generate()

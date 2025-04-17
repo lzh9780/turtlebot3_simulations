@@ -26,7 +26,9 @@ class AStar:
         # self.Env = env.Env()  # class Env
 
         self.u_set = [(-1, 0), (-1, 1), (0, 1), (1, 1),
-                        (1, 0), (1, -1), (0, -1), (-1, -1)]
+                        (1, 0), (1, -1), (0, -1), (-1, -1),
+                        (1, 2), (1, -2), (2, 1), (2, -1),
+                        (-1, 2), (-1, -2), (-2, 1), (-2, -1)]
         # self.obs = self.Env.obs  # position of obstacles
 
         self.OPEN = []  # priority queue / OPEN set
