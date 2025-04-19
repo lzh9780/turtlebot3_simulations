@@ -56,18 +56,22 @@ def get_obs():
     
     return obs
 
-def path_generate():
-    def coord_trans(x, y):
+def coord_trans(x, y):
         return (round((y + 2) * 50), round((x + 2) * 50))
-    
-    s_start = coord_trans(-1.6, 0)
-    s_goal = coord_trans(-1.5, -1.5)
+
+def path_generate(s_start, s_goal):
     # plot = plotting.Plotting(s_start, s_goal)
     # plot.obs = obs
+    if s_start == s_goal:
+        return []
     
     astar = AStar(s_start, s_goal, "euclidean")
     astar.obs = get_obs()
-    path, visited = astar.searching()
+    try:
+        path, visited = astar.searching()
+    except KeyError:
+        return []
+    
     # print(path)
     # plot.animation(path, visited, "A*")
     
@@ -90,8 +94,15 @@ def path_generate():
     # print(action)
     # plot.animation(path, visited, "A*")
     
+    # while len(action) != 0:
+    #     a = action.pop(0)
+    #     print(a)
+    
     return action
 
 
 if __name__ == '__main__':
-    path_generate()
+    start = coord_trans(-1.6, 0)
+    goal = coord_trans(-1.5, -1.5)
+    path = path_generate(start, goal)
+    print(path)
