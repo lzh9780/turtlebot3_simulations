@@ -8,6 +8,7 @@ from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from path_finding import path_generate, coord_trans
 from threading import Thread, Event
+from cv_bridge import CvBridge
 import time
 
 class Interface:
@@ -16,6 +17,8 @@ class Interface:
         
         self.curr_pose = (0, 0, 0)
         self.goal = (-1, -1)
+        
+        self.rgb_image = Image()
         
         self.goal_sub = rospy.Subscriber("/customized_goal", Point, self.goal_callback)
         # self.pose_sub = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
@@ -120,7 +123,9 @@ class Interface:
         self.execute()
         
     def image_callback(self, msg:Image):
-        pass
+        self.rgb_image = msg
+        bridge = CvBridge()
+        self.image = bridge.imgmsg_to_cv2(self.rgb_image, desired_encoding='rgb8')
 
 if __name__ == '__main__':
     rospy.init_node('control_interface')
