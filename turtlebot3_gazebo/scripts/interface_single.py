@@ -2,7 +2,7 @@
 
 import rospy
 import tf
-import math
+import math 
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseWithCovarianceStamped
@@ -10,6 +10,8 @@ from path_finding import path_generate, coord_trans
 from threading import Thread, Event
 from cv_bridge import CvBridge
 import time
+import numpy as np
+import cv2
 
 class Interface:
     def __init__(self):
@@ -126,6 +128,42 @@ class Interface:
         self.rgb_image = msg
         bridge = CvBridge()
         self.image = bridge.imgmsg_to_cv2(self.rgb_image, desired_encoding='rgb8')
+        # detect ArUco marker
+        corners, ids, _ = detector.detectMarkers(frame)
+        global_pose = {}
+        
+        if ids is not None:
+            cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+            rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
+                corners, marker_length, camera_matrix, dist_coeffs
+            )
+
+            for i in range(len(ids)):
+                cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvecs[i], tvecs[i], 0.05)
+                id = ids[i][0]
+                # --------------------------
+                # 1. Get the coordinate of the code in camera
+                x_cam = tvecs[i][0][0]
+                y_cam = tvecs[i][0][1]
+                z_cam = tvecs[i][0][2]
+
+                # 2. Convert the camera coordinate system to the robot base coordinate system (accounting for mounting offset)
+                # Assume the camera is facing forward (same direction as the robot base)
+                x_base = z_cam + CAMERA_OFFSET_X
+                y_base = x_cam + CAMERA_OFFSET_Y
+                                
+                
+                # 3. Get the robot's global position (assuming it is known)
+                rob_rot_rad = 1.68    # Global orientation of the robot (angle)
+                rob_x_global = 1.0    # The robot's X position in the global coordinate system
+                rob_y_global = 1.5    # The robot's Y position in the global coordinate system
+                
+
+                # 4. Convert the base coordinate system to the global coordinate system
+                obj_x_global = rob_x_global + x_base * cos(rob_rot_rad) - y_base * sin(rob_rot_rad)
+                obj_y_global = rob_y_global + x_base * sin(rob_rot_rad) + y_base * cos(rob_rot_rad)
+                
+                global_pose[id] = (obj_x_global, obj_y_global)
 
 if __name__ == '__main__':
     rospy.init_node('control_interface')
