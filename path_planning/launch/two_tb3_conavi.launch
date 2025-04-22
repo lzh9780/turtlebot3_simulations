@@ -29,7 +29,8 @@
         args="0 0 0 0 0 0 /map /$(arg second_tb3)/map 20"/>  
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="$(find ros_multi_tb3)/worlds/stlroom.world"/>
+    <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/wall.world "/>  
+    <!-- ros_multi_tb3)/worlds/stlroom.world -->
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="gui" value="true"/>
@@ -38,7 +39,7 @@
   </include>
 
     <arg name="map" default="map.yaml" />
-    <node name="map_server" pkg="map_server" type="map_server" args="$(find ros_multi_tb3)/maps/$(arg map)"/>
+    <node name="map_server" pkg="map_server" type="map_server" args="$(find turtlebot3_simulationgs/path_planning)/maps/$(arg map)"/>
 
 <!-- ################################################################################################# -->
   <group ns = "$(arg first_tb3)">

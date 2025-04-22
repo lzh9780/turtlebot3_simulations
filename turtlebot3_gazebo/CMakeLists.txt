@@ -85,3 +85,23 @@ install(DIRECTORY launch models rviz worlds
 ################################################################################
 # Test
 ################################################################################
+cmake_minimum_required(VERSION 3.0.2)
+project(turtlebot3_gazebo)
+
+find_package(catkin REQUIRED COMPONENTS
+  rospy
+  std_msgs
+  geometry_msgs
+  nav_msgs
+)
+
+catkin_package()
+
+catkin_install_python(PROGRAMS
+  scripts/pose_broadcaster.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+include_directories(
+  ${catkin_INCLUDE_DIRS}
+)

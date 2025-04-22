@@ -45,11 +45,13 @@ def load_cost_map():
 
 def get_obs():
     cost_map = load_cost_map()
+
+    new_map = add_robot(cost_map)
     
     obs = set()
-    for i in range(len(cost_map)):
-        for j in range(len(cost_map[i])):
-            if cost_map[i][j] == 1:
+    for i in range(len(new_map)):
+        for j in range(len(new_map[i])):
+            if new_map[i][j] == 1:
                 pass
             else:
                 obs.add((j, 200 - i))
@@ -65,12 +67,41 @@ def path_generate():
     # plot = plotting.Plotting(s_start, s_goal)
     # plot.obs = obs
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
     astar = AStar(s_start, s_goal, "euclidean")
     astar.obs = get_obs()
     path, visited = astar.searching()
     # print(path)
     # plot.animation(path, visited, "A*")
     
+
+
+
     path = path[::-1]
     action = [] # store the distance and yaw
     direction = [0, 0]
