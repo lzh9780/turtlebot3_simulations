@@ -1,0 +1,26 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/ryan/egp_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/ryan/egp_ws/src/fetch/fetch_gazebo/include/**",
+        "/home/ryan/turtlebot3_ws/src/turtlebot3_simulations/turtlebot3_gazebo/include/**",
+        "/home/ryan/egp_ws/src/wpb_home/wpb_home_bringup/include/**",
+        "/home/ryan/egp_ws/src/wpb_home/wpb_home_tutorials/include/**",
+        "/home/ryan/egp_ws/src/wpb_home/wpbh_local_planner/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
