@@ -6,7 +6,7 @@ import math
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseWithCovarianceStamped
-from path_finding import path_generate, coord_trans
+from path_finding import path_generate, coord_trans, load_cost_map
 from threading import Thread, Event
 from cv_bridge import CvBridge
 import time
@@ -19,6 +19,10 @@ class Interface:
         
         self.curr_pose = (0, 0, 0)
         self.goal = (-1, -1)
+        self.cost_map = load_cost_map()
+        
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        self.detector = cv2.aruco.ArucoDetector(self.aruco_dict)
         
         self.rgb_image = Image()
         
@@ -34,7 +38,10 @@ class Interface:
     
     def action_generate(self):
         while coord_trans(self.curr_pose[0], self.curr_pose[1]) != coord_trans(self.goal[0], self.goal[1]):
-            self.action = path_generate(coord_trans(self.curr_pose[0], self.curr_pose[1]), coord_trans(self.goal[0], self.goal[1]))
+            self.action = path_generate(self.cost_map, \
+                coord_trans(self.curr_pose[0], self.curr_pose[1]), \
+                coord_trans(self.goal[0], self.goal[1]), \
+                False, 0, 0)
             self._new_action_event.set()
             time.sleep(5)
         
@@ -129,11 +136,11 @@ class Interface:
         bridge = CvBridge()
         self.image = bridge.imgmsg_to_cv2(self.rgb_image, desired_encoding='rgb8')
         # detect ArUco marker
-        corners, ids, _ = detector.detectMarkers(frame)
+        corners, ids, _ = self.detector.detectMarkers(self.image)
         global_pose = {}
         
         if ids is not None:
-            cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+            cv2.aruco.drawDetectedMarkers(self.image, corners, ids)
             rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
                 corners, marker_length, camera_matrix, dist_coeffs
             )
@@ -160,8 +167,8 @@ class Interface:
                 
 
                 # 4. Convert the base coordinate system to the global coordinate system
-                obj_x_global = rob_x_global + x_base * cos(rob_rot_rad) - y_base * sin(rob_rot_rad)
-                obj_y_global = rob_y_global + x_base * sin(rob_rot_rad) + y_base * cos(rob_rot_rad)
+                obj_x_global = rob_x_global + x_base * math.cos(rob_rot_rad) - y_base * math.sin(rob_rot_rad)
+                obj_y_global = rob_y_global + x_base * math.sin(rob_rot_rad) + y_base * math.cos(rob_rot_rad)
                 
                 global_pose[id] = (obj_x_global, obj_y_global)
 

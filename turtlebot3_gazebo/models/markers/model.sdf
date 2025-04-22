@@ -1,0 +1,31 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="my_textured_model">
+    <static>false</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://markers/meshes/{mesh_file}</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- Optionally, define a collision element similar to the visual -->
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://markers/meshes/marker_1.dae</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <iyy>0.01</iyy>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+  </model>
+</sdf>

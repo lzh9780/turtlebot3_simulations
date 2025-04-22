@@ -43,13 +43,31 @@ def load_cost_map():
     
     return cost
 
-def get_obs():
-    cost_map = load_cost_map()
+def add_robot(cost_map, x, y):
+    pos_x, pos_y = coord_trans(x, y)
+    map = cost_map.copy()
+    
+    for n in range(-25, 25):
+        for m in range(-25, 25):
+            if pos_x + n < 0 or pos_x + n >= 200 or pos_y + m < 0 or pos_y + m >= 200:
+                pass
+            elif n ** 2 + m ** 2 > 25 ** 2: 
+                pass
+            else:
+                map[pos_x+n][pos_y+m] = 0
+    
+    return map
+
+def get_obs(cost_map, multi_robot, robot_x, robot_y):
+    if multi_robot:
+        map = add_robot(cost_map, robot_x, robot_y)
+    else: 
+        map = cost_map
     
     obs = set()
-    for i in range(len(cost_map)):
-        for j in range(len(cost_map[i])):
-            if cost_map[i][j] == 1:
+    for i in range(len(map)):
+        for j in range(len(map[i])):
+            if map[i][j] == 1:
                 pass
             else:
                 obs.add((j, 200 - i))
@@ -59,14 +77,14 @@ def get_obs():
 def coord_trans(x, y):
         return (round((y + 2) * 50), round((x + 2) * 50))
 
-def path_generate(s_start, s_goal):
+def path_generate(cost_map, s_start, s_goal, multi_robot, robot2_x, robot2_y):
     # plot = plotting.Plotting(s_start, s_goal)
     # plot.obs = obs
     if s_start == s_goal:
         return []
     
     astar = AStar(s_start, s_goal, "euclidean")
-    astar.obs = get_obs()
+    astar.obs = get_obs(cost_map, multi_robot, robot2_x, robot2_y)
     try:
         path, visited = astar.searching()
     except KeyError:

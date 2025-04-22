@@ -13,15 +13,16 @@ def spawn_random_textured_model():
     
     # Random the number of target object in three different location, make sure
     # the target object not less than 6. Each location will have 1 to 3 objects. 
-    num_list = [random.randint(1, 3) for i in range(3)]
-    while sum(num_list) < 6: 
-        num_list = [random.randint(1, 3) for i in range(3)]
+    num_list = [random.randint(1, 3) for _ in range(2)]
+    while sum(num_list) == 6: 
+        num_list = [random.randint(1, 3) for _ in range(2)]
+    num_list.append(6-sum(num_list))
 
     # Random target object. The number of target randomed will same as the sum
     # of three positions. Make sure the object will not duplicate. 
     target_list = []
     while len(target_list) in range(sum(num_list)):
-        n = random.randint(1, 9)
+        n = random.randint(1, 6)
         if n in target_list:
             pass
         else:
