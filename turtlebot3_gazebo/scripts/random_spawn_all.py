@@ -74,6 +74,44 @@ def spawn_random_textured_model():
             
         counter += 1
     
+    rospack = rospkg.RosPack()
+    marker_sdf_path=os.path.expanduser(rospack.get_path('turtlebot3_gazebo'))
+    marker_sdf_path = os.path.join(rospack.get_path('turtlebot3_gazebo'), "models", "markers", "model.sdf")
+    
+    selected_target = []
+    while len(selected_target) < 3:
+        n = random.randint(1, 6)
+        if n not in selected_target:
+            selected_target.append(n)
+        else:
+            continue
+
+        try:
+            with open(marker_sdf_path, 'r') as f:
+                model_xml = f.read()
+        except IOError:
+            rospy.logerr("Unable to open model SDF file at: %s", marker_sdf_path)
+            return
+        
+        model_xml = model_xml.replace("{mesh_file}", "marker_"+str(n)+".dae")
+        
+        pose = Pose()
+        pose.position = Point(-0.98, - (0.75 + 0.5 * (len(selected_target) - 1)), 0.2)
+        pose.orientation = Quaternion(1, 0, 0, 0)
+        
+        rospy.loginfo("Waiting for the /gazebo/spawn_sdf_model service...")
+        rospy.wait_for_service('/gazebo/spawn_sdf_model')
+        try:
+            spawn_model_client = rospy.ServiceProxy('/gazebo/spawn_sdf_model', SpawnModel)
+            model_name = "marker_model" + str(n)
+            namespace = ""
+            reference_frame = "world"
+
+            resp = spawn_model_client(model_name, model_xml, namespace, pose, reference_frame)
+            rospy.loginfo("Spawn status: %s", resp.status_message)
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call failed: %s", e)
+    
 
 if __name__ == '__main__':
     try:

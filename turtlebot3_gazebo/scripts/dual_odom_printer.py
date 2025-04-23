@@ -6,14 +6,14 @@ from tf.transformations import euler_from_quaternion
 tb1_pose = None
 tb2_pose = None
 
-def tb1_odom_callback(msg):
+def tb1_odom_callback(msg:Odometry):
     global tb1_pose
     pos = msg.pose.pose.position
     ori = msg.pose.pose.orientation
     _, _, yaw = euler_from_quaternion([ori.x, ori.y, ori.z, ori.w])
     tb1_pose = (pos.x, pos.y, yaw)
 
-def tb2_odom_callback(msg):
+def tb2_odom_callback(msg:Odometry):
     global tb2_pose
     pos = msg.pose.pose.position
     ori = msg.pose.pose.orientation
@@ -22,8 +22,8 @@ def tb2_odom_callback(msg):
 
 def main():
     rospy.init_node('dual_odom_printer')
-    rospy.Subscriber('/tb1/odom', Odometry, tb1_odom_callback)
-    rospy.Subscriber('/tb2/odom', Odometry, tb2_odom_callback)
+    rospy.Subscriber('/tb3_1/odom', Odometry, tb1_odom_callback)
+    rospy.Subscriber('/tb3_2/odom', Odometry, tb2_odom_callback)
 
     rate = rospy.Rate(10)  # 10Hz
     while not rospy.is_shutdown():

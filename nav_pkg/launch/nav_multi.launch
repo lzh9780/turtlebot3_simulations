@@ -1,0 +1,140 @@
+<launch>
+    <!--- Run move_base -->
+    <!-- <node pkg="move_base" type="move_base" name="move_base">
+       <rosparam file="$(find nav_pkg)/nav_lidar/costmap_common_params.yaml" command="load" ns="global_costmap" />
+        <rosparam file="$(find nav_pkg)/nav_lidar/costmap_common_params.yaml" command="load" ns="local_costmap" />
+        <rosparam file="$(find nav_pkg)/nav_lidar/global_costmap_params.yaml" command="load" />
+        <rosparam file="$(find nav_pkg)/nav_lidar/local_costmap_params.yaml" command="load" />
+         <param name="base_global_planner" value="global_planner/GlobalPlanner" /> 
+        <param name="base_local_planner" value="wpbh_local_planner/WpbhLocalPlanner" />
+    </node> -->
+
+    <!-- Run map server -->
+    <!-- <node pkg="map_server" type="map_server" name="map_server" args="$(find nav_pkg)/map/map.yaml"/> -->
+
+    <arg name="model" default="waffle_pi" doc="model type [burger, waffle, waffle_pi]"/>
+    <arg name="move_forward_only" default="false"/>
+
+    <arg name='first_tb3' default="tb3_1"/>
+  
+    <arg name='second_tb3' default="tb3_2"/>
+
+    <node pkg="tf" type="static_transform_publisher" name="world_to_mergedmap_tf_broadcaster"  
+        args="0.385 0.385 0 0 0 0 world map 20"/>
+
+    <node pkg="tf" type="static_transform_publisher" name="world_to_$(arg first_tb3)_tf_broadcaster11"  
+        args="0 0 0 0 0 0 /map /$(arg first_tb3)/map 20"/>
+
+    <node pkg="tf" type="static_transform_publisher" name="world_to_$(arg second_tb3)_tf_broadcaster" 
+        args="0 0 0 0 0 0 /map /$(arg second_tb3)/map 20"/> 
+    
+    <node pkg="map_server" name="map_server" type="map_server" args="$(find nav_pkg)/map/map.yaml"/>
+
+    <!--- Run AMCL -->
+    <group ns = "tb3_1">
+        <node pkg="map_server" name="map_server" type="map_server" args="$(find nav_pkg)/map/map.yaml"/>
+
+        <node pkg="amcl" type="amcl" name="amcl">
+            <param name="use_map_topic"             value="true"/>
+            <param name="odom_model_type"           value="diff"/>
+            <param name="odom_alpha5"               value="0.1"/>
+            <param name="gui_publish_rate"          value="10.0"/>
+            <param name="laser_max_beams"             value="60"/>
+            <param name="laser_max_range"           value="7.5"/>
+            <param name="min_particles"             value="500"/>
+            <param name="max_particles"             value="2000"/>
+            <param name="kld_err"                   value="0.05"/>
+            <param name="kld_z"                     value="0.99"/>
+            <param name="odom_alpha1"               value="0.2"/>
+            <param name="odom_alpha2"               value="0.2"/>
+            <param name="odom_alpha3"               value="0.2"/>
+            <param name="odom_alpha4"               value="0.2"/>
+            <param name="laser_z_hit"               value="0.5"/>
+            <param name="laser_z_short"             value="0.05"/>
+            <param name="laser_z_max"               value="0.05"/>
+            <param name="laser_z_rand"              value="0.5"/>
+            <param name="laser_sigma_hit"           value="0.2"/>
+            <param name="laser_lambda_short"        value="0.1"/>
+            <param name="laser_model_type"          value="likelihood_field"/>
+            <param name="laser_likelihood_max_dist" value="2.0"/>
+            <param name="update_min_d"              value="0.25"/>
+            <param name="update_min_a"              value="0.2"/>
+            <param name="odom_frame_id"             value="/$(arg first_tb3)/odom"/> 
+            <param name="base_frame_id"             value="/$(arg first_tb3)/base_footprint"/> 
+            <param name="global_frame_id"           value="$(arg first_tb3)/map"/>
+            <param name="resample_interval"         value="1"/>
+            <param name="transform_tolerance"       value="1.0"/>
+            <param name="recovery_alpha_slow"       value="0.0"/>
+            <param name="recovery_alpha_fast"       value="0.0"/>
+            <param name="initial_pose_x"            value="0.0"/>
+            <param name="initial_pose_y"            value="-1.6"/>
+            <param name="initial_pose_a"            value="1.57"/>
+            <remap from="scan"                      to="/$(arg first_tb3)/scan"/>
+        </node>
+        
+
+        <include file="$(find nav_pkg)/launch/move_base.launch">
+            <arg name="model" value="$(arg model)" />
+            <arg name="move_forward_only" value="$(arg move_forward_only)"/>
+            <arg name="cmd_vel_topic" value="/$(arg first_tb3)/cmd_vel"/>
+            <arg name="namespace" value="$(arg first_tb3)"/>
+        </include>
+    </group>
+
+    <group ns = "tb3_2">
+        <node pkg="map_server" name="map_server" type="map_server" args="$(find nav_pkg)/map/map.yaml"/>
+
+        <node pkg="amcl" type="amcl" name="amcl">
+            <param name="use_map_topic"             value="true"/>
+            <param name="odom_model_type"           value="diff"/>
+            <param name="odom_alpha5"               value="0.1"/>
+            <param name="gui_publish_rate"          value="10.0"/>
+            <param name="laser_max_beams"             value="60"/>
+            <param name="laser_max_range"           value="7.5"/>
+            <param name="min_particles"             value="500"/>
+            <param name="max_particles"             value="2000"/>
+            <param name="kld_err"                   value="0.05"/>
+            <param name="kld_z"                     value="0.99"/>
+            <param name="odom_alpha1"               value="0.2"/>
+            <param name="odom_alpha2"               value="0.2"/>
+            <param name="odom_alpha3"               value="0.2"/>
+            <param name="odom_alpha4"               value="0.2"/>
+            <param name="laser_z_hit"               value="0.5"/>
+            <param name="laser_z_short"             value="0.05"/>
+            <param name="laser_z_max"               value="0.05"/>
+            <param name="laser_z_rand"              value="0.5"/>
+            <param name="laser_sigma_hit"           value="0.2"/>
+            <param name="laser_lambda_short"        value="0.1"/>
+            <param name="laser_model_type"          value="likelihood_field"/>
+            <param name="laser_likelihood_max_dist" value="2.0"/>
+            <param name="update_min_d"              value="0.25"/>
+            <param name="update_min_a"              value="0.2"/>
+            <param name="odom_frame_id"             value="/$(arg second_tb3)/odom"/> 
+            <param name="base_frame_id"             value="/$(arg second_tb3)/base_footprint"/> 
+            <param name="global_frame_id"           value="$(arg second_tb3)/map"/>
+            <param name="resample_interval"         value="1"/>
+            <param name="transform_tolerance"       value="1.0"/>
+            <param name="recovery_alpha_slow"       value="0.0"/>
+            <param name="recovery_alpha_fast"       value="0.0"/>
+            <param name="initial_pose_x"            value="-1.6"/>
+            <param name="initial_pose_y"            value="0.8"/>
+            <param name="initial_pose_a"            value="0.0"/>
+            <remap from="scan"                      to="/$(arg second_tb3)/scan"/>
+        </node>
+        
+        
+
+        <include file="$(find nav_pkg)/launch/move_base.launch">
+            <arg name="model" value="$(arg model)" />
+            <arg name="move_forward_only" value="$(arg move_forward_only)"/>
+            <arg name="cmd_vel_topic" value="/$(arg second_tb3)/cmd_vel"/>
+            <arg name="namespace" value="$(arg second_tb3)"/>
+        </include>
+    </group>
+
+     <!--- Run rviz -->
+    <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find nav_pkg)/rviz/nav.rviz"/> -->
+    <!-- <node pkg="rviz" type="rviz" name="rviz" required="true"
+    args="-d $(find nav_pkg)/rviz/my_multi1.rviz"/> -->
+    
+</launch>
