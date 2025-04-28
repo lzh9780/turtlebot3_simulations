@@ -14,16 +14,22 @@ import time
 import numpy as np
 import cv2
 
-ACTION_EXPLOR_SUBMISSION_AREA = 0
-ACTION_EXPLOR_STORE_AREA_1 = 1
-ACTION_EXPLOR_STORE_AREA_2 = 2
-ACTION_EXPLOR_STORE_AREA_3 = 3
-ACTION_PICK_UP = 4
-ACTION_SUBMIT = 5
+ACTION_EXPLOR = "explor"
+ACTION_EXPLOR_AGAIN = "explor_again"
+ACTION_PICK_UP = "pick_up"
+ACTION_SUBMIT = "submit"
 
 STATUS_WAIT = "wait"
-STATUS_ACTION = "action"
 STATUS_COMPLETE = "complete"
+STATUS_MOVING_TO = "moving_to"
+STATUS_ARRIVE = "arrive"
+STATUS_PLANNING = "planning"
+
+SUBMISSION_AREA = 0
+STORE_AREA_1 = 1
+STORE_AREA_2 = 2
+STORE_AREA_3 = 3
+PUBLIC_AREA = 4
 
 class TurtlebotController:
     def __init__(self, name, map):
@@ -31,8 +37,14 @@ class TurtlebotController:
         self.curr_mission = None
         self.curr_pose = (0, 0, 0)
         self.goal = (0, 0)
-        self.mission_status = STATUS_WAIT
+        self.action = []
+        self.status = STATUS_WAIT
         self.cost_map = map
+        
+        self.inside_area = PUBLIC_AREA
+        
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_7X7_1000)
+        self.detector = cv2.aruco.ArucoDetector(self.aruco_dict)
         
         self.vel_pub = rospy.Publisher("/{}/cmd_vel".format(self.robot_name), Twist, queue_size=10)
         self.twist = Twist()
@@ -41,10 +53,11 @@ class TurtlebotController:
         self.image = None
         
         self._stop_event = Event()
+        self._stop_event.clear()
         self._new_action_event = Event()
     
     def mission_complete(self):
-        if self.mission_status == STATUS_COMPLETE:
+        if self.status == STATUS_COMPLETE:
             self.set_mission(None)
             self.set_status(STATUS_WAIT)
     
@@ -62,13 +75,11 @@ class TurtlebotController:
         # global_pose = {}
         
         # if ids is not None:
-        #     cv2.aruco.drawDetectedMarkers(self.image, corners, ids)
         #     rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
         #         corners, marker_length, camera_matrix, dist_coeffs
         #     )
 
         #     for i in range(len(ids)):
-        #         cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvecs[i], tvecs[i], 0.05)
         #         id = ids[i][0]
         #         # --------------------------
         #         # 1. Get the coordinate of the code in camera
@@ -94,11 +105,8 @@ class TurtlebotController:
                 
         #         global_pose[id] = (obj_x_global, obj_y_global)
         
-    def action_generate(self):
-        self.action = path_generate(self.cost_map,
-            coord_trans(self.curr_pose[0], self.curr_pose[1]),
-            coord_trans(self.goal[0], self.goal[1]),
-            False, 0, 0)
+    def set_action(self, action):
+        self.action = action
         self._new_action_event.set()
         
     def execute(self):
@@ -111,14 +119,15 @@ class TurtlebotController:
         
         if len(self.action) != 0:
             curr_action = self.action.pop(0)
-        else: curr_action = [0, self.get_pose()[2]]
+        else: curr_action = [0, self.curr_pose[2]]
         
         linear_run_time = curr_action[0] / 0.1
-        angular_speed = 0.1 if curr_action[1] - self.get_pose()[2] > 0 else -0.1
-        angular_run_time = abs((curr_action[1] - self.get_pose()[2]) / 0.1)
+        print(curr_action, self.curr_pose)
+        angular_speed = 0.1 if curr_action[1] - self.curr_pose[2] > 0 else -0.1
+        angular_run_time = abs((curr_action[1] - self.curr_pose[2]) / 0.1)
         
         while not self._stop_event.is_set(): 
-            print(curr_action, self.get_pose())
+            print(curr_action, self.curr_pose)
             print(linear_run_time, angular_speed, angular_run_time)
             if time.time() - start_time < angular_run_time:
                 # execute rotation 
@@ -155,11 +164,20 @@ class TurtlebotController:
                 self.twist_pub(0.0, 0.0)
                 return
     
-    def get_mission(self):
-        return self.curr_action
+    def explore(self):
+        pass
     
-    def set_mission(self, mission):
-        self.curr_action = mission
+    def pick_up(self):
+        pass
+    
+    def submit(self):
+        pass
+    
+    def get_mission(self):
+        return self.curr_mission
+    
+    def set_mission(self, mission, area):
+        self.curr_mission = (mission, area)
     
     def get_goal(self):
         return self.goal
@@ -171,22 +189,23 @@ class TurtlebotController:
         return self.curr_pose
     
     def get_status(self):
-        return self.mission_status
+        return self.status
     
     def set_status(self, status):
-        self.mission_status = status
+        self.status = status
+    
+    def set_stop(self):
+        self._stop_event.set()
+        time.sleep(0.1)
+        self._stop_event.clear()
             
 
 class Interface:
     def __init__(self):
-        self.action = []
         self.cost_map = load_cost_map()
         
         self.tb3_1 = TurtlebotController("tb3_1", self.cost_map)
         self.tb3_2 = TurtlebotController("tb3_2", self.cost_map)
-        
-        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-        self.detector = cv2.aruco.ArucoDetector(self.aruco_dict)
         
         # self.goal_sub = rospy.Subscriber("/customized_goal", Point, self.goal_callback)
         # self.pose_sub = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
@@ -195,7 +214,7 @@ class Interface:
         
         self.cube_position = {}
         self.target_list = []
-        self.area_entre_pos = [(0.0, -1.5), (1.5, -1), (-1.25, 0.5), (-1, 1.25)]
+        self.area_entre_pos = [(0.0, 1.5), (1.575, 1), (-1.25, 0.5), (-1, -1.25)]
     
     def pose_callback(self, msg:LinkStates):
     #     x = msg.pose.pose.position.x
@@ -223,7 +242,7 @@ class Interface:
                     pose.orientation.w
                 )
                 yaw = tf.transformations.euler_from_quaternion(quaternion)
-                self.tb3_1.curr_pose = (pose.position.x, pose.position.y, yaw)
+                self.tb3_1.curr_pose = (pose.position.x, pose.position.y, yaw[2])
             elif name == "turtlebot3_2::base_footprint":
                 pose:Pose = msg.pose[counter]
                 quaternion = (
@@ -233,31 +252,116 @@ class Interface:
                     pose.orientation.w
                 )
                 yaw = tf.transformations.euler_from_quaternion(quaternion)
-                self.tb3_2.curr_pose = (pose.position.x, pose.position.y, yaw)
+                self.tb3_2.curr_pose = (pose.position.x, pose.position.y, yaw[2])
 
             counter += 1
+    
+    def mission_start(self):
+        t1 = Thread(target=self.tb_action, args=(self.tb3_1, self.tb3_2))
+        t1.start()
+        
+        t2 = Thread(target=self.tb_action, args=(self.tb3_2, self.tb3_1))
+        t2.start()
+    
+    def tb_action(self, robot: TurtlebotController, other_robot: TurtlebotController):
+        timer = time.time()
+        while not rospy.is_shutdown():
+            mission = robot.get_mission()
+            if mission != None and mission[0] == ACTION_EXPLOR:
+                if robot.get_status() == STATUS_PLANNING:
+                    robot.set_goal(self.area_entre_pos[mission[1]])
+                    self.action_generate(robot, other_robot)
+                    robot.set_status(STATUS_MOVING_TO)
+                    timer = time.time()
+                elif robot.get_status() == STATUS_MOVING_TO:
+                    if robot.get_pose()[:2] == robot.get_goal():
+                        robot.set_status(STATUS_ARRIVE)
+                        continue
+                    if time.time() - timer > 3:
+                        robot.set_stop()
+                        self.action_generate(robot, other_robot)
+                        timer = time.time()
+                elif robot.get_status() == STATUS_ARRIVE:
+                    if mission[1] == SUBMISSION_AREA or mission[1] == STORE_AREA_3:
+                        robot.action.append((0, 1.57), (0, -1.57))
+                    elif mission[1] == STORE_AREA_1 or mission[1] == STORE_AREA_2:
+                        robot.action.append((0, 0), (0, 3.1))
+                    robot.set_status = STATUS_COMPLETE
+                    robot.execute()
+                elif robot.get_status() == STATUS_COMPLETE:
+                    if len(robot.action) == 0:
+                        robot.mission_complete()
+                        robot.set_stop()
+                
+        
+    def action_generate(self, robot: TurtlebotController, other_robot: TurtlebotController):
+        robot.action = path_generate(robot.cost_map,
+            coord_trans(robot.get_pose()[0], -robot.get_pose()[1]),
+            coord_trans(robot.get_goal()[0], robot.get_goal()[1]),
+            True, other_robot.get_pose()[0], other_robot.get_pose()[1])
+        
+        robot.execute()
+        
+    def get_distance(self, robot:TurtlebotController, target_pos):
+        robot_pose = robot.get_pose()
+        return math.sqrt((robot_pose[0] - target_pos[0]) ** 2 + (robot_pose[1] - target_pos[1]) ** 2)
+    
+    def compare_distance(self, area):
+        if self.get_distance(self.tb3_1, self.area_entre_pos[area]) \
+            <= self.get_distance(self.tb3_2, self.area_entre_pos[area]):
+            return self.tb3_1
+        else: return self.tb3_2
 
+    def robot_free(self, robot:TurtlebotController):
+        if robot.get_status() == STATUS_WAIT:
+            return True
+        else: return False
     
-    def goal_callback(self, msg: Point):
-        self.goal = (msg.x, msg.y)
-        self._stop_event.set()
-        time.sleep(0.1)
-        self._stop_event.clear()
+    def duplicate_mission(self, mission, area):
+        return (self.tb3_1.get_mission() == (mission, area) or \
+            self.tb3_2.get_mission == (mission, area))
         
-        t = Thread(target=self.action_generate)
-        t.start()
+    def mission_pub(self, mission, area):
+        if not self.duplicate_mission(mission, area):
+            if self.robot_free(self.tb3_1) and self.robot_free(self.tb3_2):
+                robot = self.compare_distance(area)
+                robot.set_mission(mission, area)
+                robot.set_status(STATUS_PLANNING)
+            elif self.robot_free(self.tb3_1): 
+                self.tb3_1.set_mission(mission, area)
+                self.tb3_1.set_status(STATUS_PLANNING)
+            elif self.robot_free(self.tb3_2): 
+                self.tb3_2.set_mission(mission, area)
+                self.tb3_2.set_status(STATUS_PLANNING)
+            else: return False
+        else: return False
         
-        self.execute()
-        
+        return True
     
-        
+    def main(self):
+        self.mission_start()
+        while not rospy.is_shutdown():
+            print("First robot status:", self.tb3_1.curr_pose, self.tb3_1.action)
+            print("Second robot status:", self.tb3_2.curr_pose, self.tb3_2.action)
+            if len(self.target_list) != 3:
+                self.mission_pub(ACTION_EXPLOR, SUBMISSION_AREA)
+            
+            if len(self.cube_position) != 3:
+                for i in range(1, 4):
+                    if i not in self.cube_position:
+                        mission_published = self.mission_pub(ACTION_EXPLOR, i)
+                        if mission_published:
+                            self.cube_position[i] = {}
+            elif sum(len(self.cube_position[i]) for i in self.cube_position.keys()) != 6:
+                for i in range(1, 4):
+                    if len(self.cube_position[i]) < 3:
+                        self.mission_pub(ACTION_EXPLOR_AGAIN, i)
+
 
 if __name__ == '__main__':
     rospy.init_node('control_interface')
     interface = Interface()
     
-    # t1 = Thread(target=interface.tb3_1_action)
-    # t2 = Thread(target=interface.tb3_2_action)
+    interface.main()
     
-    while not rospy.is_shutdown():
-        rospy.spin()
+    # rospy.spin()

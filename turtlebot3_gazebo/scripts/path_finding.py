@@ -27,11 +27,11 @@ def load_cost_map():
             if arr[i][j] == 1:
                 pass
             else:
-                for n in range(-15, 15):
-                    for m in range(-15, 15):
+                for n in range(-12, 12):
+                    for m in range(-12, 12):
                         if i + n < 0 or i + n >= 200 or j + m < 0 or j + m >= 200:
                             pass
-                        elif n ** 2 + m ** 2 > 15 ** 2: 
+                        elif n ** 2 + m ** 2 > 12 ** 2: 
                             pass
                         else:
                             cost[i+n][j+m] = 0
@@ -47,11 +47,11 @@ def add_robot(cost_map, x, y):
     pos_x, pos_y = coord_trans(x, y)
     map = cost_map.copy()
     
-    for n in range(-25, 25):
-        for m in range(-25, 25):
+    for n in range(-24, 24):
+        for m in range(-24, 24):
             if pos_x + n < 0 or pos_x + n >= 200 or pos_y + m < 0 or pos_y + m >= 200:
                 pass
-            elif n ** 2 + m ** 2 > 25 ** 2: 
+            elif n ** 2 + m ** 2 > 24 ** 2: 
                 pass
             else:
                 map[pos_x+n][pos_y+m] = 0
@@ -60,7 +60,7 @@ def add_robot(cost_map, x, y):
 
 def get_obs(cost_map, multi_robot, robot_x, robot_y):
     if multi_robot:
-        map = add_robot(cost_map, robot_x, robot_y)
+        map = add_robot(cost_map, -robot_y, -robot_x)
     else: 
         map = cost_map
     
@@ -78,8 +78,8 @@ def coord_trans(x, y):
         return (round((y + 2) * 50), round((x + 2) * 50))
 
 def path_generate(cost_map, s_start, s_goal, multi_robot, robot2_x, robot2_y):
-    # plot = plotting.Plotting(s_start, s_goal)
-    # plot.obs = obs
+    plot = plotting.Plotting(s_start, s_goal)
+    plot.obs = get_obs(cost_map, multi_robot, robot2_x, robot2_y)
     if s_start == s_goal:
         return []
     
@@ -104,7 +104,7 @@ def path_generate(cost_map, s_start, s_goal, multi_robot, robot2_x, robot2_y):
         else: 
             if c != 0:
                 distance = math.sqrt((path[c][0] - start_pont[0]) ** 2 + (path[c][1] - start_pont[1]) ** 2)
-                yaw = math.atan2(path[c][0] - start_pont[0], path[c][1] - start_pont[1])
+                yaw = -math.atan2(path[c][0] - start_pont[0], path[c][1] - start_pont[1])
                 action.append((round(distance / 50, 2), round(yaw, 2)))
             direction = new_direction
             start_pont = path[c]
