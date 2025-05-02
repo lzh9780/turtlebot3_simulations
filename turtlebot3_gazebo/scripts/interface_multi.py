@@ -19,11 +19,18 @@ ACTION_EXPLOR_AGAIN = "explor_again"
 ACTION_PICK_UP = "pick_up"
 ACTION_SUBMIT = "submit"
 
+STATUS_PLANNING = "planning"
 STATUS_WAIT = "wait"
 STATUS_COMPLETE = "complete"
-STATUS_MOVING_TO = "moving_to"
+STATUS_MOVING_TO = "moving"
 STATUS_ARRIVE = "arrive"
-STATUS_PLANNING = "planning"
+STATUS_PICK_UP = "picking"
+STATUS_SUBMIT = "submitting"
+
+STATUS_FOUND = "found"
+STATUS_SELECTED = "selected"
+STATUS_PICKED = "picked"
+STATUS_SUBMITTED = "submitted"
 
 SUBMISSION_AREA = 0
 STORE_AREA_1 = 1
@@ -36,6 +43,7 @@ class TurtlebotController:
         self.robot_name = name
         self.curr_mission = None
         self.curr_pose = (0, 0, 0)
+        self.other_robot_pose = (0, 0, 0)
         self.goal = (0, 0)
         self.action = []
         self.status = STATUS_WAIT
@@ -51,6 +59,8 @@ class TurtlebotController:
         
         # self.img_sub = rospy.Subscriber("", Image, self.image_callback, queue_size=10)
         self.image = None
+        
+        self.timer = time.time()
         
         self._stop_event = Event()
         self._stop_event.clear()
@@ -109,9 +119,11 @@ class TurtlebotController:
         self.action = action
         self._new_action_event.set()
         
-    def execute(self):
+    def execute(self, join=False):
         t = Thread(target=self.run)
         t.start()
+        if join:
+            t.join()
     
     def run(self):
         start_time = time.time()
@@ -157,6 +169,7 @@ class TurtlebotController:
                 self._new_action_event.clear()
                 if len(self.action) != 0:
                     curr_action = self.action.pop(0)
+                    start_time = time.time()
                 else: curr_action = [0, self.curr_pose[2]]
             
             # exit thread when robot reach goal position
@@ -164,11 +177,61 @@ class TurtlebotController:
                 self.twist_pub(0.0, 0.0)
                 return
     
-    def explore(self):
-        pass
+    def move_to_area(self, pose):
+        if self.get_status == STATUS_PLANNING:
+            self.set_goal(pose)
+            self.action_generate()
+            self.set_status(STATUS_MOVING_TO)
+            self.timer = time.time() 
+        elif self.get_status() == STATUS_MOVING_TO:
+            if self.get_pose()[:2] == self.get_goal():
+                self.set_status(STATUS_ARRIVE)
+                return
+            if time.time() - self.timer > 3:
+                self.set_stop()
+                self.action_generate()
+                self.timer = time.time()
     
-    def pick_up(self):
-        pass
+    def tb_action(self, area_list, cube_list):
+        while not rospy.is_shutdown():
+            mission = self.get_mission()
+            if mission == None:
+                continue
+            elif mission[0] == ACTION_EXPLOR:
+                self.explore(area_list[mission[1]])
+            elif mission[0] == ACTION_PICK_UP:
+                self.pick_up(area_list[cube_list[mission[1]]["area"]], cube_list)
+            elif mission[0] == ACTION_SUBMIT:
+                self.submit()
+            else: continue
+        
+    def action_generate(self):
+        self.action = path_generate(self.cost_map,
+            coord_trans(self.get_pose()[0], -self.get_pose()[1]),
+            coord_trans(self.get_goal()[0], self.get_goal()[1]),
+            True, self.other_robot_pose[0], self.other_robot_pose[1])
+        
+        self.execute()
+    
+    def explore(self, area_info):
+        self.move_to_area(area_info["enter_pos"])
+        if self.get_status() == STATUS_ARRIVE:
+            if self.curr_mission[1] == SUBMISSION_AREA or self.curr_mission[1] == STORE_AREA_3:
+                self.action.append((0, 1.57), (0, -1.57))
+            elif self.curr_mission[1] == STORE_AREA_1 or self.curr_mission[1] == STORE_AREA_2:
+                self.action.append((0, 0), (0, 3.1))
+
+            self.execute(True)
+            self.set_status = STATUS_COMPLETE
+        elif self.get_status() == STATUS_COMPLETE:
+            if len(self.action) == 0:
+                self.mission_complete()
+                self.set_stop()
+    
+    def pick_up(self, area_info, cube_list):
+        self.move_to_area(area_info["enter_pos"])
+        if self.get_status() == STATUS_ARRIVE:
+            pass
     
     def submit(self):
         pass
@@ -212,9 +275,17 @@ class Interface:
         
         self.pose_sub = rospy.Subscriber("/gazebo/link_states", LinkStates, self.pose_callback)
         
-        self.cube_position = {}
-        self.target_list = []
-        self.area_entre_pos = [(0.0, 1.5), (1.575, 1), (-1.25, 0.5), (-1, -1.25)]
+        self.area_list = {}
+        self.cube_list = {}
+        # self.target_list = []
+        # self.area_entre_pos = [(0.0, 1.5), (1.575, 1), (-1.25, 0.5), (-1, -1.25)]
+        
+        self.area_list[SUBMISSION_AREA] = {"enter_pos": (0.0, 1.5), "cube_number":-1, "cube_list": []}
+        self.area_list[STORE_AREA_1] = {"enter_pos": (1.575, 1), "cube_number":-1, "cube_list": []}
+        self.area_list[STORE_AREA_2] = {"enter_pos": (-1.25, 0.5), "cube_number":-1, "cube_list": []}
+        self.area_list[STORE_AREA_3] = {"enter_pos": (-1, -1.25), "cube_number":-1, "cube_list": []}
+        
+        # self.cube_list[id] = {"status": str, "pose": tuple, "area": int}
     
     def pose_callback(self, msg:LinkStates):
     #     x = msg.pose.pose.position.x
@@ -243,6 +314,7 @@ class Interface:
                 )
                 yaw = tf.transformations.euler_from_quaternion(quaternion)
                 self.tb3_1.curr_pose = (pose.position.x, pose.position.y, yaw[2])
+                self.tb3_2.other_robot_pose = (pose.position.x, pose.position.y, yaw[2])
             elif name == "turtlebot3_2::base_footprint":
                 pose:Pose = msg.pose[counter]
                 quaternion = (
@@ -253,62 +325,24 @@ class Interface:
                 )
                 yaw = tf.transformations.euler_from_quaternion(quaternion)
                 self.tb3_2.curr_pose = (pose.position.x, pose.position.y, yaw[2])
+                self.tb3_1.other_robot_pose = (pose.position.x, pose.position.y, yaw[2])
 
             counter += 1
     
     def mission_start(self):
-        t1 = Thread(target=self.tb_action, args=(self.tb3_1, self.tb3_2))
+        t1 = Thread(target=self.tb3_1.tb_action, args=(self.area_list, self.cube_list))
         t1.start()
         
-        t2 = Thread(target=self.tb_action, args=(self.tb3_2, self.tb3_1))
+        t2 = Thread(target=self.tb3_2.tb_action, args=(self.area_list, self.cube_list))
         t2.start()
-    
-    def tb_action(self, robot: TurtlebotController, other_robot: TurtlebotController):
-        timer = time.time()
-        while not rospy.is_shutdown():
-            mission = robot.get_mission()
-            if mission != None and mission[0] == ACTION_EXPLOR:
-                if robot.get_status() == STATUS_PLANNING:
-                    robot.set_goal(self.area_entre_pos[mission[1]])
-                    self.action_generate(robot, other_robot)
-                    robot.set_status(STATUS_MOVING_TO)
-                    timer = time.time()
-                elif robot.get_status() == STATUS_MOVING_TO:
-                    if robot.get_pose()[:2] == robot.get_goal():
-                        robot.set_status(STATUS_ARRIVE)
-                        continue
-                    if time.time() - timer > 3:
-                        robot.set_stop()
-                        self.action_generate(robot, other_robot)
-                        timer = time.time()
-                elif robot.get_status() == STATUS_ARRIVE:
-                    if mission[1] == SUBMISSION_AREA or mission[1] == STORE_AREA_3:
-                        robot.action.append((0, 1.57), (0, -1.57))
-                    elif mission[1] == STORE_AREA_1 or mission[1] == STORE_AREA_2:
-                        robot.action.append((0, 0), (0, 3.1))
-                    robot.set_status = STATUS_COMPLETE
-                    robot.execute()
-                elif robot.get_status() == STATUS_COMPLETE:
-                    if len(robot.action) == 0:
-                        robot.mission_complete()
-                        robot.set_stop()
-                
-        
-    def action_generate(self, robot: TurtlebotController, other_robot: TurtlebotController):
-        robot.action = path_generate(robot.cost_map,
-            coord_trans(robot.get_pose()[0], -robot.get_pose()[1]),
-            coord_trans(robot.get_goal()[0], robot.get_goal()[1]),
-            True, other_robot.get_pose()[0], other_robot.get_pose()[1])
-        
-        robot.execute()
-        
+
     def get_distance(self, robot:TurtlebotController, target_pos):
         robot_pose = robot.get_pose()
         return math.sqrt((robot_pose[0] - target_pos[0]) ** 2 + (robot_pose[1] - target_pos[1]) ** 2)
     
     def compare_distance(self, area):
-        if self.get_distance(self.tb3_1, self.area_entre_pos[area]) \
-            <= self.get_distance(self.tb3_2, self.area_entre_pos[area]):
+        if self.get_distance(self.tb3_1, self.area_list[area]["enter_pose"]) \
+            <= self.get_distance(self.tb3_2, self.area_list[area]["enter_pose"]):
             return self.tb3_1
         else: return self.tb3_2
 
@@ -343,19 +377,25 @@ class Interface:
         while not rospy.is_shutdown():
             print("First robot status:", self.tb3_1.curr_pose, self.tb3_1.action)
             print("Second robot status:", self.tb3_2.curr_pose, self.tb3_2.action)
-            if len(self.target_list) != 3:
+            if self.area_list[SUBMISSION_AREA]["cube_number"] != 3:
                 self.mission_pub(ACTION_EXPLOR, SUBMISSION_AREA)
+            else:
+                for i in self.area_list[SUBMISSION_AREA]["cube_list"]:
+                    try:
+                        if self.cube_list[i]["status"] == STATUS_FOUND:
+                            mission_published = self.mission_pub(ACTION_PICK_UP, i)
+                            if mission_published:
+                                self.cube_list[i]["status"] = STATUS_SELECTED
+                    except KeyError:
+                        continue
             
-            if len(self.cube_position) != 3:
-                for i in range(1, 4):
-                    if i not in self.cube_position:
-                        mission_published = self.mission_pub(ACTION_EXPLOR, i)
-                        if mission_published:
-                            self.cube_position[i] = {}
-            elif sum(len(self.cube_position[i]) for i in self.cube_position.keys()) != 6:
-                for i in range(1, 4):
-                    if len(self.cube_position[i]) < 3:
-                        self.mission_pub(ACTION_EXPLOR_AGAIN, i)
+            for i in range(1, 4):
+                if self.area_list[i]["cube_number"] == -1:
+                    mission_published = self.mission_pub(ACTION_EXPLOR, i)
+                    if mission_published:
+                        self.area_list[i]["cube_number"] = 0
+                elif len(self.cube_list) != 6 and self.area_list[i]["cube_number"] < 3:
+                    self.mission_pub(ACTION_EXPLOR_AGAIN, i)
 
 
 if __name__ == '__main__':
