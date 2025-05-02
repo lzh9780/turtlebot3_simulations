@@ -1,8 +1,6 @@
 <launch>
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
 
-
-
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/wall.world"/>
     <arg name="paused" value="false"/>
@@ -11,18 +9,15 @@
     <arg name="headless" value="false"/>
     <arg name="debug" value="false"/>
   </include>
-
-
+<!-- 
   <node name="map_server" pkg="map_server" type="map_server"
   args="/home/ryan/turtlebot3_ws/src/turtlebot3_simulations/nav_pkg/map/map.yaml"
-  output="screen"/>
+  output="screen"/> -->
 
-  
   <group ns="tb3_1">
     <param name="tf_prefix" value="tb3_1" />
     <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
   
-
         <!-- 启动gmapping SLAM节点
         <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
           <param name="base_frame" value="tb3_1/base_footprint"/>
@@ -34,7 +29,6 @@
           <param name="sigma" value="0.05"/>
           <!其他参数根据需要可以调整 -->
         <!-- </node> --> 
-
 
         <!-- <node pkg="amcl" type="amcl" name="amcl" output="screen">
           <param name="base_frame" value="tb3_1/base_footprint"/>
@@ -51,22 +45,21 @@
 
         </node> -->
         
-
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
       <param name="publish_frequency" type="double" value="10.0" />
 
     </node>
   
     <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf" 
-          args="-urdf -model turtlebot3_1 -x -1.6 -y 0.0 -z 0.02 -Y 0.0 -param robot_description" />
-
+          args="-urdf -model turtlebot3_1 -x -1.0  -y 0.0 -z 0.02 -Y 0.0 -param robot_description" />
+  <!-- -1.6 0.0 0.02 0 -->
 <!-- 发布静态变换: map -> tb3_1/map -->
-    <node pkg="tf" type="static_transform_publisher" name="map_to_tb3_1_map" 
-    args="0 0 0 0 0 0 /map /tb3_1/map 100" />
+    <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_tb3_1_map" 
+    args="0 0 0 0 0 0 /map /tb3_1/map 100" /> -->
 
 <!-- 发布静态变换: tb3_1/map -> tb3_1/odom -->
-<node pkg="tf" type="static_transform_publisher" name="tb3_1_map_to_tb3_1_odom" 
-    args="0 0 0 0 0 0 /tb3_1/map /tb3_1/odom 100" />
+<!-- <node pkg="tf" type="static_transform_publisher" name="tb3_1_map_to_tb3_1_odom" 
+    args="0 0 0 0 0 0 /tb3_1/map /tb3_1/odom 100" /> -->
   </group>
   
   <group ns="tb3_2">
@@ -108,17 +101,19 @@
     </node>
   
     <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf" 
-          args="-urdf -model turtlebot3_2 -x 0.5 -y 1.6 -z 0.02 -Y -1.57 -param robot_description" />
+          args="-urdf -model turtlebot3_2 -x 0.0 -y 0.0 -z 0.02 -Y 0.00 -param robot_description" />
+
+          <!-- 0.5 1.6 0.02 -1.57 -->
     <!-- 发布静态变换: map -> tb3_2/map -->
-    <node pkg="tf" type="static_transform_publisher" name="map_to_tb3_2_map" 
-          args="0 0 0 0 0 0 /map /tb3_2/map 100" />
+    <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_tb3_2_map" 
+          args="0 0 0 0 0 0 /map /tb3_2/map 100" /> -->
 
     <!-- 发布静态变换: tb3_2/map -> tb3_2/odom -->
-    <node pkg="tf" type="static_transform_publisher" name="tb3_2_map_to_tb3_2_odom" 
-          args="0 0 0 0 0 0 /tb3_2/map /tb3_2/odom 100" />
+    <!-- <node pkg="tf" type="static_transform_publisher" name="tb3_2_map_to_tb3_2_odom" 
+          args="0 0 0 0 0 0 /tb3_2/map /tb3_2/odom 100" /> -->
   </group>
   
 
-  <node pkg="turtlebot3_gazebo" type="random_spawn_all.py" name="random_spawn_all" output="screen" />
+  <!-- <node pkg="turtlebot3_gazebo" type="random_spawn_all.py" name="random_spawn_all" output="screen" /> -->
 
 </launch> 

@@ -32,7 +32,7 @@
 
     <!--- Run AMCL -->
     <group ns = "tb3_1">
-        <node pkg="map_server" name="map_server" type="map_server" args="$(find nav_pkg)/map/map.yaml"/>
+        <node pkg="map_server" name="map_server" type="map_server" args="$(find nav_pkg)/map/multimap.yaml"/>
 
         <node pkg="amcl" type="amcl" name="amcl">
             <param name="use_map_topic"             value="true"/>
@@ -82,7 +82,7 @@
     </group>
 
     <group ns = "tb3_2">
-        <node pkg="map_server" name="map_server" type="map_server" args="$(find nav_pkg)/map/map.yaml"/>
+        <node pkg="map_server" name="map_server" type="map_server" args="$(find nav_pkg)/map/multimap.yaml"/>
 
         <node pkg="amcl" type="amcl" name="amcl">
             <param name="use_map_topic"             value="true"/>
