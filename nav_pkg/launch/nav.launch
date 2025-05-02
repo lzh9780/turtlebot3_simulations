@@ -5,12 +5,12 @@
         <rosparam file="$(find nav_pkg)/nav_lidar/costmap_common_params.yaml" command="load" ns="local_costmap" />
         <rosparam file="$(find nav_pkg)/nav_lidar/global_costmap_params.yaml" command="load" />
         <rosparam file="$(find nav_pkg)/nav_lidar/local_costmap_params.yaml" command="load" />
-        <!-- <param name="base_global_planner" value="global_planner/GlobalPlanner" /> 
-        <param name="base_local_planner" value="wpbh_local_planner/WpbhLocalPlanner" /> -->
+        <param name="base_global_planner" value="global_planner/GlobalPlanner" /> 
+        <param name="base_local_planner" value="wpbh_local_planner/WpbhLocalPlanner" />
     </node>
 
     <!-- Run map server -->
-    <node pkg="map_server" type="map_server" name="map_server" args="$(find nav_pkg)/map/map.yaml"/>
+    <node pkg="map_server" type="map_server" name="map_server" args="$(find nav_pkg)/map/multimap.yaml"/>
 
     <!--- Run AMCL -->
     <node pkg="amcl" type="amcl" name="amcl"/>
