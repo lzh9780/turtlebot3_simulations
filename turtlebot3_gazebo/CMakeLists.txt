@@ -99,6 +99,7 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/pose_broadcaster.py
+  scripts/detect_center.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
