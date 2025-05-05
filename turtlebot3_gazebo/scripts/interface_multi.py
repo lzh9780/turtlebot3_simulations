@@ -4,7 +4,7 @@ import rospy
 import tf
 import math 
 from geometry_msgs.msg import Twist, Point, Pose
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from gazebo_msgs.msg import LinkStates
 from path_finding import path_generate, coord_trans, load_cost_map
@@ -24,8 +24,6 @@ STATUS_WAIT = "wait"
 STATUS_COMPLETE = "complete"
 STATUS_MOVING_TO = "moving"
 STATUS_ARRIVE = "arrive"
-STATUS_PICK_UP = "picking"
-STATUS_SUBMIT = "submitting"
 
 STATUS_FOUND = "found"
 STATUS_SELECTED = "selected"
@@ -50,6 +48,12 @@ class TurtlebotController:
         self.cost_map = map
         
         self.inside_area = PUBLIC_AREA
+        
+        self.camera_info = CameraInfo()
+        
+        self.pose_sub = rospy.Subscriber("/{}/amcl_pose".format(self.robot_name), PoseWithCovarianceStamped, self.pose_callback)
+        self.image_sub = rospy.Subscriber("/{}/camera/rgb/image_raw/compressed".format(self.robot_name), Image, self.image_callback)
+        self.camera_info_sub = rospy.Subscriber("/{}/camera/rgb/camera_info".format(self.robot_name), CameraInfo, self.camera_info_callback)
         
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_7X7_1000)
         self.detector = cv2.aruco.ArucoDetector(self.aruco_dict)
@@ -79,41 +83,18 @@ class TurtlebotController:
     def image_callback(self, msg:Image):
         bridge = CvBridge()
         self.image = bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
+    
+    def pose_callback(self, msg:PoseWithCovarianceStamped):
+        # self.curr_pose = msg.pose.pose
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        orientation = msg.pose.pose.orientation
+        (_, _, yaw) = tf.transformations.euler_from_quaternion(orientation)
         
-        # detect ArUco marker
-        # corners, ids, _ = self.detector.detectMarkers(self.image)
-        # global_pose = {}
-        
-        # if ids is not None:
-        #     rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-        #         corners, marker_length, camera_matrix, dist_coeffs
-        #     )
-
-        #     for i in range(len(ids)):
-        #         id = ids[i][0]
-        #         # --------------------------
-        #         # 1. Get the coordinate of the code in camera
-        #         x_cam = tvecs[i][0][0]
-        #         y_cam = tvecs[i][0][1]
-        #         z_cam = tvecs[i][0][2]
-
-        #         # 2. Convert the camera coordinate system to the robot base coordinate system (accounting for mounting offset)
-        #         # Assume the camera is facing forward (same direction as the robot base)
-        #         x_base = z_cam + CAMERA_OFFSET_X
-        #         y_base = x_cam + CAMERA_OFFSET_Y
-                                
-                
-        #         # 3. Get the robot's global position (assuming it is known)
-        #         rob_rot_rad = 1.68    # Global orientation of the robot (angle)
-        #         rob_x_global = 1.0    # The robot's X position in the global coordinate system
-        #         rob_y_global = 1.5    # The robot's Y position in the global coordinate system
-                
-
-        #         # 4. Convert the base coordinate system to the global coordinate system
-        #         obj_x_global = rob_x_global + x_base * math.cos(rob_rot_rad) - y_base * math.sin(rob_rot_rad)
-        #         obj_y_global = rob_y_global + x_base * math.sin(rob_rot_rad) + y_base * math.cos(rob_rot_rad)
-                
-        #         global_pose[id] = (obj_x_global, obj_y_global)
+        self.curr_pose = (x, y, yaw)
+    
+    def camera_info_callback(self, msg:CameraInfo):
+        self.camera_info = msg
         
     def set_action(self, action):
         self.action = action
@@ -192,6 +173,42 @@ class TurtlebotController:
                 self.action_generate()
                 self.timer = time.time()
     
+    def detection(self, cube_list, marker_length):
+        # detect ArUco marker
+        corners, ids, _ = self.detector.detectMarkers(self.image)
+        
+        if ids is not None:
+            rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
+                corners, marker_length, np.reshape(self.camera_info.K, (3, 3)), self.camera_info.D
+            )
+
+            for i in range(len(ids)):
+                id = ids[i][0]
+                # --------------------------
+                # 1. Get the coordinate of the code in camera
+                x_cam = tvecs[i][0][0]
+                y_cam = tvecs[i][0][1]
+                z_cam = tvecs[i][0][2]
+
+                # 2. Convert the camera coordinate system to the robot base coordinate system (accounting for mounting offset)
+                # Assume the camera is facing forward (same direction as the robot base)
+                x_base = z_cam # + CAMERA_OFFSET_X
+                y_base = x_cam # + CAMERA_OFFSET_Y
+                
+                # 3. Get the robot's global position (assuming it is known)
+                rob_rot_rad = self.curr_pose[2]    # Global orientation of the robot (angle)
+                rob_x_global = self.curr_pose[0]    # The robot's X position in the global coordinate system
+                rob_y_global = self.curr_pose[1]    # The robot's Y position in the global coordinate system
+
+                # 4. Convert the base coordinate system to the global coordinate system. TODO: check
+                obj_x_global = rob_x_global + x_base * math.cos(rob_rot_rad) - y_base * math.sin(rob_rot_rad)
+                obj_y_global = rob_y_global + x_base * math.sin(rob_rot_rad) + y_base * math.cos(rob_rot_rad)
+                
+                try:
+                    cube_list[id]["pose"] = (obj_x_global, obj_y_global)
+                except KeyError:
+                    cube_list[id] = {"status": STATUS_FOUND, "pose": (obj_x_global, obj_y_global), "area": self.inside_area}
+    
     def tb_action(self, area_list, cube_list):
         while not rospy.is_shutdown():
             mission = self.get_mission()
@@ -200,7 +217,7 @@ class TurtlebotController:
             elif mission[0] == ACTION_EXPLOR:
                 self.explore(area_list[mission[1]])
             elif mission[0] == ACTION_PICK_UP:
-                self.pick_up(area_list[cube_list[mission[1]]["area"]], cube_list)
+                self.pick_up(area_list, cube_list)
             elif mission[0] == ACTION_SUBMIT:
                 self.submit()
             else: continue
@@ -228,13 +245,25 @@ class TurtlebotController:
                 self.mission_complete()
                 self.set_stop()
     
-    def pick_up(self, area_info, cube_list):
-        self.move_to_area(area_info["enter_pos"])
+    def pick_up(self, area_list, cube_list):
+        self.move_to_area(area_list[cube_list[self.get_mission()[1]]["area"]]["enter_pos"])
         if self.get_status() == STATUS_ARRIVE:
-            pass
+            id = self.get_mission()[1]
+            target = cube_list[id]
+            if target["status"] == STATUS_SELECTED:
+                pass
+            elif target["status"] == STATUS_PICKED:
+                index = np.where(np.array(area_list[SUBMISSION_AREA]["cube_number"]) == id)[0][0]
+                self.set_mission(ACTION_SUBMIT, index)
+                self.set_status(STATUS_PLANNING)
+                self.submit(area_list)
     
-    def submit(self):
-        pass
+    def submit(self, area_list):
+        self.move_to_area(area_list[SUBMISSION_AREA]["enter_pos"])
+        if self.get_status() == STATUS_ARRIVE:
+            
+            
+            pass
     
     def get_mission(self):
         return self.curr_mission
@@ -273,7 +302,7 @@ class Interface:
         # self.goal_sub = rospy.Subscriber("/customized_goal", Point, self.goal_callback)
         # self.pose_sub = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
         
-        self.pose_sub = rospy.Subscriber("/gazebo/link_states", LinkStates, self.pose_callback)
+        # self.pose_sub = rospy.Subscriber("/gazebo/link_states", LinkStates, self.pose_callback)
         
         self.area_list = {}
         self.cube_list = {}
@@ -395,7 +424,7 @@ class Interface:
                     if mission_published:
                         self.area_list[i]["cube_number"] = 0
                 elif len(self.cube_list) != 6 and self.area_list[i]["cube_number"] < 3:
-                    self.mission_pub(ACTION_EXPLOR_AGAIN, i)
+                    self.mission_pub(ACTION_EXPLOR, i)
 
 
 if __name__ == '__main__':
