@@ -47,11 +47,11 @@
         
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
       <param name="publish_frequency" type="double" value="10.0" />
-
+      <param name="tf_prefix" value="tb3_1" />
     </node>
   
     <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf" 
-          args="-urdf -model turtlebot3_1 -x -1.0  -y 0.0 -z 0.02 -Y 0.0 -param robot_description" />
+          args="-urdf -model turtlebot3_1 -x -1.6  -y 0.0 -z 0.02 -Y 0.0 -param robot_description" />
   <!-- -1.6 0.0 0.02 0 -->
 <!-- 发布静态变换: map -> tb3_1/map -->
     <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_tb3_1_map" 
@@ -97,11 +97,11 @@
          -->
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
       <param name="publish_frequency" type="double" value="10.0" />
-
+      <param name="tf_prefix" value="tb3_2" />
     </node>
   
     <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf" 
-          args="-urdf -model turtlebot3_2 -x 0.0 -y 0.0 -z 0.02 -Y 0.00 -param robot_description" />
+          args="-urdf -model turtlebot3_2 -x 0.5 -y 1.6 -z 0.02 -Y -1.57 -param robot_description" />
 
           <!-- 0.5 1.6 0.02 -1.57 -->
     <!-- 发布静态变换: map -> tb3_2/map -->

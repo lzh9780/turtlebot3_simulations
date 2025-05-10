@@ -6,6 +6,7 @@ from PIL import Image
 from Astar import AStar
 import plotting
 import math
+import cv2
 
 def load_cost_map():
     rospack = rospkg.RosPack()
@@ -44,7 +45,7 @@ def load_cost_map():
     return cost
 
 def add_robot(cost_map, x, y):
-    pos_x, pos_y = coord_trans(x, y)
+    pos_x, pos_y = coord_trans(-y, x)
     map = cost_map.copy()
     
     for n in range(-24, 24):
@@ -60,7 +61,7 @@ def add_robot(cost_map, x, y):
 
 def get_obs(cost_map, multi_robot, robot_x, robot_y):
     if multi_robot:
-        map = add_robot(cost_map, -robot_y, -robot_x)
+        map = add_robot(cost_map, robot_x, robot_y)
     else: 
         map = cost_map
     
@@ -75,20 +76,20 @@ def get_obs(cost_map, multi_robot, robot_x, robot_y):
     return obs
 
 def coord_trans(x, y):
-        return (round((y + 2) * 50), round((x + 2) * 50))
+        return (round((-y + 2) * 50), round((x + 2) * 50))
 
 def path_generate(cost_map, s_start, s_goal, multi_robot, robot2_x, robot2_y):
     plot = plotting.Plotting(s_start, s_goal)
     plot.obs = get_obs(cost_map, multi_robot, robot2_x, robot2_y)
     if s_start == s_goal:
-        return []
+        return None
     
     astar = AStar(s_start, s_goal, "euclidean")
     astar.obs = get_obs(cost_map, multi_robot, robot2_x, robot2_y)
     try:
         path, visited = astar.searching()
     except KeyError:
-        return []
+        return None
     
     # print(path)
     # plot.animation(path, visited, "A*")
@@ -120,7 +121,9 @@ def path_generate(cost_map, s_start, s_goal, multi_robot, robot2_x, robot2_y):
 
 
 if __name__ == '__main__':
-    start = coord_trans(-1.6, 0)
-    goal = coord_trans(-1.5, -1.5)
-    path = path_generate(start, goal)
+    map = load_cost_map()
+    # start = coord_trans(-1.6, 0)
+    start = coord_trans(0.4676916136201157, 1.5674919654116455)
+    goal = coord_trans(1.625, -1.0)
+    path = path_generate(map, start, goal, True, -1.6, 0)
     print(path)

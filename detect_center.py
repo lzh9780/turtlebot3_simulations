@@ -75,21 +75,20 @@ if __name__ == "__main__":
     rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, 0.045, camera_matrix, dist_coeffs)
 
     # 分组：每 6 个 ID 归为一个 cube（你可以根据实际情况调整）
-    cube_dict = {}  # cube_idx -> list of (id, tvec)
+    cube_dict = {}  # cube_idx -> list of tvec
     for i, marker_id in enumerate(ids.flatten()):
-        cube_idx = marker_id // 6
-        if cube_idx not in cube_dict:
-            cube_dict[cube_idx] = []
-        cube_dict[cube_idx].append((marker_id, tvecs[i]))
+        if marker_id not in cube_dict:
+            cube_dict[marker_id] = []
+        cube_dict[marker_id].append(tvecs[i])
 
     # 对每个方块估计位置
-    for cube_idx, marker_data in cube_dict.items():
-        aruco_ids = [item[0] for item in marker_data]
-        tvec_list = [item[1] for item in marker_data]
+    for id in cube_dict.keys():
+        tvec_list = cube_dict[id]
+        
+    
         T, R = detect_cube_position(tvec_list, cube_size=0.05)
         if T is not None:
-            print(f"\n🧊 Cube {cube_idx}")
-            print(f"AruCo IDs: {aruco_ids}")
+            print(f"AruCo IDs: {id}, {len(tvec_list)}")
             print(f"中心位置: {T}")
             print(f"旋转矩阵:\n{R}")
 
@@ -114,4 +113,4 @@ if __name__ == "__main__":
 
 
         else:
-            print(f"\n❌ Cube {cube_idx} ID {aruco_ids} 数据不足，跳过优化。")
+            print(f"\n Cube {id} ID 数据不足，跳过优化。")

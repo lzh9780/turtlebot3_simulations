@@ -13,6 +13,7 @@ from cv_bridge import CvBridge
 import time
 import numpy as np
 import cv2
+from scipy.optimize import least_squares
 
 ACTION_EXPLOR = "explor"
 ACTION_EXPLOR_AGAIN = "explor_again"
@@ -24,6 +25,7 @@ STATUS_WAIT = "wait"
 STATUS_COMPLETE = "complete"
 STATUS_MOVING_TO = "moving"
 STATUS_ARRIVE = "arrive"
+STATUS_REACHING = "reaching"
 
 STATUS_FOUND = "found"
 STATUS_SELECTED = "selected"
@@ -48,17 +50,18 @@ class TurtlebotController:
         self.cost_map = map
         
         self.inside_area = PUBLIC_AREA
+        self.area_range = [[-1.0, 1.0, -2.0, -0.5], [1.0, 2.0, -2.0, -0.75], [-2.0, -1.0, -2.0, -0.5], [-2.0, -1.0, 0.5, 2.0]]
         
         self.camera_info = CameraInfo()
         
-        self.pose_sub = rospy.Subscriber("/{}/amcl_pose".format(self.robot_name), PoseWithCovarianceStamped, self.pose_callback)
-        self.image_sub = rospy.Subscriber("/{}/camera/rgb/image_raw/compressed".format(self.robot_name), Image, self.image_callback)
-        self.camera_info_sub = rospy.Subscriber("/{}/camera/rgb/camera_info".format(self.robot_name), CameraInfo, self.camera_info_callback)
+        self.pose_sub = rospy.Subscriber(f"/{self.robot_name}/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
+        self.image_sub = rospy.Subscriber(f"/{self.robot_name}/camera/rgb/image_raw", Image, self.image_callback)
+        self.info_sub = rospy.Subscriber(f"/{self.robot_name}/camera/rgb/camera_info", CameraInfo, self.camera_info_callback)
         
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_7X7_1000)
         self.detector = cv2.aruco.ArucoDetector(self.aruco_dict)
         
-        self.vel_pub = rospy.Publisher("/{}/cmd_vel".format(self.robot_name), Twist, queue_size=10)
+        self.vel_pub = rospy.Publisher(f"/{self.robot_name}/cmd_vel", Twist, queue_size=10)
         self.twist = Twist()
         
         # self.img_sub = rospy.Subscriber("", Image, self.image_callback, queue_size=10)
@@ -89,9 +92,18 @@ class TurtlebotController:
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         orientation = msg.pose.pose.orientation
-        (_, _, yaw) = tf.transformations.euler_from_quaternion(orientation)
+        (_, _, yaw) = tf.transformations.euler_from_quaternion(
+            [orientation.x, orientation.y, orientation.z, orientation.w]
+        )
         
         self.curr_pose = (x, y, yaw)
+        
+        for i in range(len(self.area_range)):
+            if self.area_range[0] < x <self.area_range[1] and self.area_range[2] < y < self.area_range[3]:
+                self.inside_area = i
+                break
+            if i == 3:
+                self.inside_area = PUBLIC_AREA
     
     def camera_info_callback(self, msg:CameraInfo):
         self.camera_info = msg
@@ -158,8 +170,8 @@ class TurtlebotController:
                 self.twist_pub(0.0, 0.0)
                 return
     
-    def move_to_area(self, pose):
-        if self.get_status == STATUS_PLANNING:
+    def move_to_position(self, pose):
+        if self.get_status() == STATUS_PLANNING:
             self.set_goal(pose)
             self.action_generate()
             self.set_status(STATUS_MOVING_TO)
@@ -173,65 +185,151 @@ class TurtlebotController:
                 self.action_generate()
                 self.timer = time.time()
     
-    def detection(self, cube_list, marker_length):
+    def detect_cube_position(self, tvecs, cube_size):
+        L = cube_size / 2
+        local_positions = [
+            np.array([0, 0, L]),
+            np.array([L, 0, 0]),
+            np.array([0, L, 0]),
+            np.array([0, 0, -L]),
+            np.array([-L, 0, 0]),
+            np.array([0, -L, 0])
+        ]
+
+        def residual(params, observations):
+            R = params[:9].reshape(3, 3)
+            T = params[9:12]
+            residuals = []
+            for i, P_obs in enumerate(observations):
+                local_idx = i % 6
+                P_local = local_positions[local_idx]
+                P_pred = R @ P_local + T
+                residuals.extend(P_pred - P_obs)
+            return residuals
+
+        observations = [tvec[0] for tvec in tvecs]
+        initial_params = np.eye(3).flatten().tolist() + [0.0, 0.0, 0.0]
+
+        result = least_squares(
+            residual,
+            initial_params,
+            args=(observations,),
+            method='trf',
+            max_nfev=200
+        )
+
+        R_optimized = result.x[:9].reshape(3, 3)
+        T_optimized = result.x[9:12]
+
+        U, _, Vt = np.linalg.svd(R_optimized)
+        R_optimized = U @ Vt
+
+        return T_optimized, R_optimized
+    
+    def detection(self, cube_list, area_list, marker_length):
+        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        _, frame = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
         # detect ArUco marker
-        corners, ids, _ = self.detector.detectMarkers(self.image)
+        corners, ids, _ = self.detector.detectMarkers(frame)
         
-        if ids is not None:
+        if ids is not None and self.camera_info.K is not None and self.camera_info.D is not None:
             rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
                 corners, marker_length, np.reshape(self.camera_info.K, (3, 3)), self.camera_info.D
             )
 
-            for i in range(len(ids)):
-                id = ids[i][0]
-                # --------------------------
-                # 1. Get the coordinate of the code in camera
-                x_cam = tvecs[i][0][0]
-                y_cam = tvecs[i][0][1]
-                z_cam = tvecs[i][0][2]
+            cube_dict = {}  # cube_idx -> list of tvec
+            for i, marker_id in enumerate(ids.flatten()):
+                if marker_id not in cube_dict:
+                    cube_dict[marker_id] = []
+                cube_dict[marker_id].append(tvecs[i])
 
-                # 2. Convert the camera coordinate system to the robot base coordinate system (accounting for mounting offset)
-                # Assume the camera is facing forward (same direction as the robot base)
-                x_base = z_cam # + CAMERA_OFFSET_X
-                y_base = x_cam # + CAMERA_OFFSET_Y
-                
-                # 3. Get the robot's global position (assuming it is known)
-                rob_rot_rad = self.curr_pose[2]    # Global orientation of the robot (angle)
-                rob_x_global = self.curr_pose[0]    # The robot's X position in the global coordinate system
-                rob_y_global = self.curr_pose[1]    # The robot's Y position in the global coordinate system
 
-                # 4. Convert the base coordinate system to the global coordinate system. TODO: check
-                obj_x_global = rob_x_global + x_base * math.cos(rob_rot_rad) - y_base * math.sin(rob_rot_rad)
-                obj_y_global = rob_y_global + x_base * math.sin(rob_rot_rad) + y_base * math.cos(rob_rot_rad)
+            for id in cube_dict.keys():
+                tvec_list = cube_dict[id]
                 
-                try:
-                    cube_list[id]["pose"] = (obj_x_global, obj_y_global)
-                except KeyError:
-                    cube_list[id] = {"status": STATUS_FOUND, "pose": (obj_x_global, obj_y_global), "area": self.inside_area}
-    
+                trans, _ = self.detect_cube_position(tvec_list, cube_size=0.05)
+                if trans is not None:
+                    rob_x_global = self.curr_pose[0]
+                    rob_y_global = self.curr_pose[1]
+                    rob_rot_rad = self.curr_pose[2]
+
+                    x_cam = trans[0]
+                    z_cam = trans[2]
+
+                    x_base = z_cam + 0.076
+                    y_base = -x_cam + 0
+
+                    obj_x_global = rob_x_global + x_base * math.cos(rob_rot_rad) - y_base * math.sin(rob_rot_rad)
+                    obj_y_global = rob_y_global + x_base * math.sin(rob_rot_rad) + y_base * math.cos(rob_rot_rad)
+                    
+                    area = -1
+                    for i in range(1, 4):
+                        if obj_x_global in range(self.area_range[i][0], self.area_range[i][1]) and \
+                        range(self.area_range[i][2], self.area_range[i][3]):
+                            area = i
+                            break
+                    
+                    if marker_length == 0.045:
+                        try:
+                            cube_list[id]["pose"] = (obj_x_global, obj_y_global)
+                            if cube_list[id]["area"] != area:
+                                area_list[cube_list[id]["area"]]["cube_list"].remove(id)
+                                cube_list[id]["area"] = area
+                                area_list[area]["cube_list"].append(id)
+                                
+                        except (KeyError, ValueError) as e:
+                            cube_list[id] = {"status": STATUS_FOUND, "pose": (obj_x_global, obj_y_global), "area": area}
+                            area_list[area]["cube_list"].append(id)
+                    else:
+                        id += 0.5
+                        try:
+                            cube_list[id]["pose"] = (obj_x_global, obj_y_global)
+                            if cube_list[id]["area"] != area:
+                                area_list[cube_list[id]["area"]]["cube_list"].remove(id)
+                                cube_list[id]["area"] = area
+                                area_list[area]["cube_list"].append(id)
+                                
+                        except (KeyError, ValueError) as e:
+                            cube_list[id] = {"status": STATUS_FOUND, "pose": (obj_x_global, obj_y_global), "area": area}
+                            area_list[area]["cube_list"].append(id)
+
+        
+    def move_toward_origin(self, x, y, distance=0.225):
+        length = math.hypot(x, y)
+        if length == 0:
+            return (x, y)  # already at origin
+        dx = distance * x / length
+        dy = distance * y / length
+        return (x - dx, y - dy)
+
     def tb_action(self, area_list, cube_list):
-        while not rospy.is_shutdown():
+        while True:
             mission = self.get_mission()
+            if self.inside_area == SUBMISSION_AREA:
+                self.detection(cube_list, area_list, 0.09)
+            else: 
+                self.detection(cube_list, area_list, 0.045)
+
             if mission == None:
                 continue
-            elif mission[0] == ACTION_EXPLOR:
+            elif mission[0] is ACTION_EXPLOR:
                 self.explore(area_list[mission[1]])
-            elif mission[0] == ACTION_PICK_UP:
-                self.pick_up(area_list, cube_list)
-            elif mission[0] == ACTION_SUBMIT:
+            elif mission[0] is ACTION_PICK_UP:
+                self.pick_up(cube_list)
+            elif mission[0] is ACTION_SUBMIT:
                 self.submit()
             else: continue
         
     def action_generate(self):
         self.action = path_generate(self.cost_map,
-            coord_trans(self.get_pose()[0], -self.get_pose()[1]),
+            coord_trans(self.get_pose()[0], self.get_pose()[1]),
             coord_trans(self.get_goal()[0], self.get_goal()[1]),
             True, self.other_robot_pose[0], self.other_robot_pose[1])
         
         self.execute()
     
     def explore(self, area_info):
-        self.move_to_area(area_info["enter_pos"])
+        self.move_to_position(area_info["enter_pos"])
         if self.get_status() == STATUS_ARRIVE:
             if self.curr_mission[1] == SUBMISSION_AREA or self.curr_mission[1] == STORE_AREA_3:
                 self.action.append((0, 1.57), (0, -1.57))
@@ -239,31 +337,40 @@ class TurtlebotController:
                 self.action.append((0, 0), (0, 3.1))
 
             self.execute(True)
-            self.set_status = STATUS_COMPLETE
+            self.set_status(STATUS_COMPLETE)
         elif self.get_status() == STATUS_COMPLETE:
             if len(self.action) == 0:
                 self.mission_complete()
                 self.set_stop()
     
-    def pick_up(self, area_list, cube_list):
-        self.move_to_area(area_list[cube_list[self.get_mission()[1]]["area"]]["enter_pos"])
-        if self.get_status() == STATUS_ARRIVE:
-            id = self.get_mission()[1]
-            target = cube_list[id]
-            if target["status"] == STATUS_SELECTED:
-                pass
-            elif target["status"] == STATUS_PICKED:
-                index = np.where(np.array(area_list[SUBMISSION_AREA]["cube_number"]) == id)[0][0]
-                self.set_mission(ACTION_SUBMIT, index)
-                self.set_status(STATUS_PLANNING)
-                self.submit(area_list)
+    def pick_up(self, cube_list):
+        # self.move_to_position(area_list[cube_list[self.get_mission()[1]]["area"]]["enter_pos"])
+        # if self.get_status() == STATUS_PLANNING:
+        id = self.get_mission()[1]
+        target = cube_list[id]
+        if target["status"] == STATUS_SELECTED:
+            x = target["pose"][0] - self.curr_pose[0]
+            y = target["pose"][1] - self.curr_pose[1]
+            self.move_to_position(self.move_toward_origin(x + self.curr_pose[0], y + self.curr_pose[1]))
+            if self.status == STATUS_ARRIVE:
+                target["status"] = STATUS_PICKED
+        elif target["status"] == STATUS_PICKED:
+            # index = np.where(np.array(area_list[SUBMISSION_AREA]["cube_number"]) == id)[0][0]
+            self.set_mission(ACTION_SUBMIT, id + 0.5)
+            self.set_status(STATUS_PLANNING)
+            self.submit(cube_list)
     
-    def submit(self, area_list):
-        self.move_to_area(area_list[SUBMISSION_AREA]["enter_pos"])
+    def submit(self, cube_list):
+        # self.move_to_position(area_list[SUBMISSION_AREA]["enter_pos"])
+        id = self.get_mission()[1]
+        target = cube_list[id]
+        x = target["pose"][0] - self.curr_pose[0]
+        y = target["pose"][1] - self.curr_pose[1]
+        self.move_to_position(self.move_toward_origin(x + self.curr_pose[0], y + self.curr_pose[1]))
         if self.get_status() == STATUS_ARRIVE:
-            
-            
-            pass
+            self.set_mission(None)
+            self.set_status(STATUS_WAIT)
+            cube_list[id - 0.5]["status"] = STATUS_SUBMITTED
     
     def get_mission(self):
         return self.curr_mission
@@ -309,69 +416,69 @@ class Interface:
         # self.target_list = []
         # self.area_entre_pos = [(0.0, 1.5), (1.575, 1), (-1.25, 0.5), (-1, -1.25)]
         
-        self.area_list[SUBMISSION_AREA] = {"enter_pos": (0.0, 1.5), "cube_number":-1, "cube_list": []}
-        self.area_list[STORE_AREA_1] = {"enter_pos": (1.575, 1), "cube_number":-1, "cube_list": []}
-        self.area_list[STORE_AREA_2] = {"enter_pos": (-1.25, 0.5), "cube_number":-1, "cube_list": []}
-        self.area_list[STORE_AREA_3] = {"enter_pos": (-1, -1.25), "cube_number":-1, "cube_list": []}
+        self.area_list[SUBMISSION_AREA] = {"enter_pos": (0.0, -1.5), "cube_number":-1, "cube_list": []}
+        self.area_list[STORE_AREA_1] = {"enter_pos": (1.625, -1), "cube_number":-1, "cube_list": []}
+        self.area_list[STORE_AREA_2] = {"enter_pos": (-1.25, -0.75), "cube_number":-1, "cube_list": []}
+        self.area_list[STORE_AREA_3] = {"enter_pos": (-1.25, 1.25), "cube_number":-1, "cube_list": []}
         
         # self.cube_list[id] = {"status": str, "pose": tuple, "area": int}
     
-    def pose_callback(self, msg:LinkStates):
-    #     x = msg.pose.pose.position.x
-    #     y = msg.pose.pose.position.y
-    #     orientation_q = msg.pose.pose.orientation
-    #     quaternion = (
-    #         orientation_q.x,
-    #         orientation_q.y,
-    #         orientation_q.z,
-    #         orientation_q.w
-    #     )
-    #     euler = tf.transformations.euler_from_quaternion(quaternion)
-    #     yaw = euler[2] # math.degrees(euler[2])
-    #     # print("Robot Position => x: {:.2f}, y: {:.2f}, yaw: {:.2f}°".format(x, y, yaw))
-    #     self.curr_pose = (x, y, yaw)
-    #     print(self.curr_pose)
-        counter = 0
-        for name in msg.name:
-            if name == "turtlebot3_1::base_footprint":
-                pose:Pose = msg.pose[counter]
-                quaternion = (
-                    pose.orientation.x,
-                    pose.orientation.y,
-                    pose.orientation.z,
-                    pose.orientation.w
-                )
-                yaw = tf.transformations.euler_from_quaternion(quaternion)
-                self.tb3_1.curr_pose = (pose.position.x, pose.position.y, yaw[2])
-                self.tb3_2.other_robot_pose = (pose.position.x, pose.position.y, yaw[2])
-            elif name == "turtlebot3_2::base_footprint":
-                pose:Pose = msg.pose[counter]
-                quaternion = (
-                    pose.orientation.x,
-                    pose.orientation.y,
-                    pose.orientation.z,
-                    pose.orientation.w
-                )
-                yaw = tf.transformations.euler_from_quaternion(quaternion)
-                self.tb3_2.curr_pose = (pose.position.x, pose.position.y, yaw[2])
-                self.tb3_1.other_robot_pose = (pose.position.x, pose.position.y, yaw[2])
+    # def pose_callback(self, msg:LinkStates):
+    # #     x = msg.pose.pose.position.x
+    # #     y = msg.pose.pose.position.y
+    # #     orientation_q = msg.pose.pose.orientation
+    # #     quaternion = (
+    # #         orientation_q.x,
+    # #         orientation_q.y,
+    # #         orientation_q.z,
+    # #         orientation_q.w
+    # #     )
+    # #     euler = tf.transformations.euler_from_quaternion(quaternion)
+    # #     yaw = euler[2] # math.degrees(euler[2])
+    # #     # print("Robot Position => x: {:.2f}, y: {:.2f}, yaw: {:.2f}°".format(x, y, yaw))
+    # #     self.curr_pose = (x, y, yaw)
+    # #     print(self.curr_pose)
+    #     counter = 0
+    #     for name in msg.name:
+    #         if name == "turtlebot3_1::base_footprint":
+    #             pose:Pose = msg.pose[counter]
+    #             quaternion = (
+    #                 pose.orientation.x,
+    #                 pose.orientation.y,
+    #                 pose.orientation.z,
+    #                 pose.orientation.w
+    #             )
+    #             rot = tf.transformations.euler_from_quaternion(quaternion)
+    #             self.tb3_1.curr_pose = (pose.position.x, pose.position.y, rot[2])
+    #             self.tb3_2.other_robot_pose = (pose.position.x, pose.position.y, rot[2])
+    #         elif name == "turtlebot3_2::base_footprint":
+    #             pose:Pose = msg.pose[counter]
+    #             quaternion = (
+    #                 pose.orientation.x,
+    #                 pose.orientation.y,
+    #                 pose.orientation.z,
+    #                 pose.orientation.w
+    #             )
+    #             rot = tf.transformations.euler_from_quaternion(quaternion)
+    #             self.tb3_2.curr_pose = (pose.position.x, pose.position.y, rot[2])
+    #             self.tb3_1.other_robot_pose = (pose.position.x, pose.position.y, rot[2])
 
-            counter += 1
+    #         counter += 1
     
     def mission_start(self):
-        t1 = Thread(target=self.tb3_1.tb_action, args=(self.area_list, self.cube_list))
-        t1.start()
+        self.t1 = Thread(target=self.tb3_1.tb_action, args=(self.area_list, self.cube_list))
+        self.t1.start()
         
-        t2 = Thread(target=self.tb3_2.tb_action, args=(self.area_list, self.cube_list))
-        t2.start()
+        self.t2 = Thread(target=self.tb3_2.tb_action, args=(self.area_list, self.cube_list))
+        self.t2.start()
 
     def get_distance(self, robot:TurtlebotController, target_pos):
         robot_pose = robot.get_pose()
         return math.sqrt((robot_pose[0] - target_pos[0]) ** 2 + (robot_pose[1] - target_pos[1]) ** 2)
     
     def compare_distance(self, area):
-        if self.get_distance(self.tb3_1, self.area_list[area]["enter_pose"]) \
-            <= self.get_distance(self.tb3_2, self.area_list[area]["enter_pose"]):
+        if self.get_distance(self.tb3_1, self.area_list[area]["enter_pos"]) \
+            <= self.get_distance(self.tb3_2, self.area_list[area]["enter_pos"]):
             return self.tb3_1
         else: return self.tb3_2
 
@@ -404,8 +511,12 @@ class Interface:
     def main(self):
         self.mission_start()
         while not rospy.is_shutdown():
-            print("First robot status:", self.tb3_1.curr_pose, self.tb3_1.action)
-            print("Second robot status:", self.tb3_2.curr_pose, self.tb3_2.action)
+            print(f"{self.tb3_1.robot_name} status:", self.tb3_1.get_pose(), self.tb3_1.get_mission(), self.tb3_1.action)
+            print(f"{self.tb3_2.robot_name} status:", self.tb3_2.get_pose(), self.tb3_2.get_mission(), self.tb3_2.action)
+            
+            self.tb3_1.other_robot_pose = self.tb3_2.get_pose()
+            self.tb3_2.other_robot_pose = self.tb3_1.get_pose()
+            
             if self.area_list[SUBMISSION_AREA]["cube_number"] != 3:
                 self.mission_pub(ACTION_EXPLOR, SUBMISSION_AREA)
             else:

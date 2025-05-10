@@ -22,7 +22,7 @@ class MultiRobotPosePrinter:
         rospy.Subscriber("/tb3_1/amcl_pose", PoseWithCovarianceStamped, self.tb3_1_callback)
         rospy.Subscriber("/tb3_2/amcl_pose", PoseWithCovarianceStamped, self.tb3_2_callback)
 
-        rospy.Timer(rospy.Duration(0.1), self.print_poses)  # 每秒打印一次
+        rospy.Timer(rospy.Duration(0.1), self.print_poses)  # 每秒打印10次
 
     def tb3_1_callback(self, msg):
         self.tb3_1_pose = msg.pose.pose
