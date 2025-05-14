@@ -1,0 +1,22 @@
+ACTION_EXPLOR = "explor"
+ACTION_EXPLOR_AGAIN = "explor_again"
+ACTION_PICK_UP = "pick_up"
+ACTION_SUBMIT = "submit"
+
+STATUS_PLANNING = "planning"
+STATUS_WAIT = "wait"
+STATUS_COMPLETE = "complete"
+STATUS_MOVING_TO = "moving"
+STATUS_ARRIVE = "arrive"
+STATUS_REACHING = "reaching"
+
+STATUS_FOUND = "found"
+STATUS_SELECTED = "selected"
+STATUS_PICKED = "picked"
+STATUS_SUBMITTED = "submitted"
+
+SUBMISSION_AREA = 0
+STORE_AREA_1 = 1
+STORE_AREA_2 = 2
+STORE_AREA_3 = 3
+PUBLIC_AREA = 4
