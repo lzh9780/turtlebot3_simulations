@@ -238,10 +238,10 @@ class TurtlebotController:
             elif self.goal_status != None and self.goal_status.status != 1:
                 self.move_to_position()
         elif self.status == STATUS_ARRIVE:
-            self.twist_pub(0, -0.1)
+            self.twist_pub(0, -0.2)
+            time.sleep(5)
+            self.twist_pub(0, 0.2)
             time.sleep(10)
-            self.twist_pub(0, 0.1)
-            time.sleep(20)
             self.twist_pub(0, 0)
             self.set_status(STATUS_COMPLETE)
         elif self.status == STATUS_COMPLETE:
@@ -266,21 +266,24 @@ class TurtlebotController:
                 # x, y = self.move_toward_origin(target_pose[0], target_pose[1])
                 yaw = math.atan2(target_pose[1], target_pose[0])
                 if yaw > 0.01:
-                    self.twist_pub(0, yaw / 10)
+                    self.twist_pub(0, yaw)
                     return
                 
-                if math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) > 0.02:
-                    self.twist_pub(math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) / 10, 0)
+                if math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) > 0.22:
+                    self.twist_pub(math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) / 5, 0)
                     return
+                
+            except KeyError:
+                print("Target not found")
+                self.detection(0.045)
+            finally:
+                self.twist_pub(0, 0)
                 
                 s = String()
                 s.data = json.dumps({"type": "cube", "id": int(cube_id), "info": {"pose": None, "area": None, "status": STATUS_PICKED}})
                 self.status_pub.publish(s)
                 
-                self.set_mission(ACTION_SUBMIT, cube_id)
-            except KeyError:
-                print("Target not found")
-                self.detection(0.045)
+                self.set_mission((ACTION_SUBMIT, cube_id))
                             
         # if target["status"] == STATUS_SELECTED:
         #     x = target["pose"][0] - self.curr_pose[0]

@@ -22,10 +22,10 @@ class MainControl:
         # self.robots["tb3_1"] = {"pose": None, "mission": None, "status": STATUS_WAIT, "goal": None}
         # self.robots["tb3_2"] = deepcopy(self.robots["tb3_1"])
         
-        self.area_list[SUBMISSION_AREA] = {"enter_pos": (0.0, -1.5, 0.0, 0.0, 0.0, 1.0, 0.0), "cube_number":-1}
+        self.area_list[SUBMISSION_AREA] = {"enter_pos": (0.0, -1.25, 0.0, 0.0, 0.0, 1.0, 0.0), "cube_number":-1}
         self.area_list[STORE_AREA_1] = {"enter_pos": (1.625, -1.0, 0.0, 0.0, 0.0, -0.707, 0.707), "cube_number":-1}
-        self.area_list[STORE_AREA_2] = {"enter_pos": (-1.25, -0.75, 0.0, 0.0, 0.0, -0.707, 0.707), "cube_number":-1}
-        self.area_list[STORE_AREA_3] = {"enter_pos": (-1.25, 1.25, 0.0, 0.0, 0.0, 1.0, 0.0), "cube_number":-1}
+        self.area_list[STORE_AREA_2] = {"enter_pos": (-1.5, -0.75, 0.0, 0.0, 0.0, -0.707, 0.707), "cube_number":-1}
+        self.area_list[STORE_AREA_3] = {"enter_pos": (-1.25, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0), "cube_number":-1}
         
         self.mission_pub = rospy.Publisher("/missions", String, queue_size=10) # 
         
@@ -38,7 +38,7 @@ class MainControl:
         try:
             try:
                 x, y, z, rx, ry, rz, rw = d["info"]["pose"]
-            except ValueError:
+            except (ValueError, TypeError):
                 print("Invaild pose: ", d["info"]["pose"])
             
             i = d["id"]
@@ -160,6 +160,15 @@ class MainControl:
             
             if len(self.markers) != 3:
                 self.mission_issue(ACTION_EXPLOR, SUBMISSION_AREA)
+            elif len(self.cube_list) != 6:
+                for i in range(1, 4):
+                    if self.area_list[i]["cube_number"] == -1:
+                        mission_published = self.mission_issue(ACTION_EXPLOR, i)
+                        if mission_published:
+                            self.area_list[i]["cube_number"] = 0
+            
+                if all([self.area_list[i]["cube_number"] >= 0 for i in range(1, 4)]) and self.area_list[i]["cube_number"] < 2:
+                    self.mission_issue(ACTION_EXPLOR, i)
             else:
                 for i in self.markers.keys():
                     try:
@@ -170,17 +179,16 @@ class MainControl:
                         elif self.cube_list[i]["status"] == STATUS_PICKED:
                             self.mission_issue(ACTION_SUBMIT, i)
                     except KeyError:
-                        print("Invalid target")
                         continue
             
-            for i in range(1, 4):
-                if self.area_list[i]["cube_number"] == -1:
-                    mission_published = self.mission_issue(ACTION_EXPLOR, i)
-                    if mission_published:
-                        self.area_list[i]["cube_number"] = 0
+            # for i in range(1, 4):
+            #     if self.area_list[i]["cube_number"] == -1:
+            #         mission_published = self.mission_issue(ACTION_EXPLOR, i)
+            #         if mission_published:
+            #             self.area_list[i]["cube_number"] = 0
             
-                if all([self.area_list[i]["cube_number"] >= 0 for i in range(1, 4)]) and len(self.cube_list) != 6 and self.area_list[i]["cube_number"] < 2:
-                    self.mission_issue(ACTION_EXPLOR, i)
+            #     if all([self.area_list[i]["cube_number"] >= 0 for i in range(1, 4)]) and len(self.cube_list) != 6 and self.area_list[i]["cube_number"] < 2:
+            #         self.mission_issue(ACTION_EXPLOR, i)
 
 
 if __name__ == "__main__":
