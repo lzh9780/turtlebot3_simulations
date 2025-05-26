@@ -1,124 +1,144 @@
 #!/usr/bin/env python
 
+import argparse
 from status import *
-from path_finding import path_generate, coord_trans, load_cost_map
 import math
 import rospy
-from geometry_msgs.msg import PoseStamped, PointStamped, Pose
-from std_msgs.msg import Header, String
+from geometry_msgs.msg import Pose
+from std_msgs.msg import String
 import time
+from copy import deepcopy
+import json
 
 class MainControl:
-    def __init__(self):
-        self.cost_map = load_cost_map()
-        
-        # self.tb3_1 = TurtlebotController("tb3_1", self.cost_map)
-        # self.tb3_2 = TurtlebotController("tb3_2", self.cost_map)
-        
+    def __init__(self, robot_num=2):
+        # Store robot information 
+        self.robot_num = robot_num
         self.robots = {}
-        self.robots["tb3_1"] = {"pose": Pose, "mission": None, "status": STATUS_WAIT, "goal": Pose}
-        self.robots["tb3_2"] = self.robots["tb3_1"].copy()
+        self.area_list = {}     # {area_id: {"enter_pos": (x, y, z, rx, ry, rz, rw), "cube_numer": Int}}
+        self.cube_list = {}     # {cube_id: {"status": str, "pose": (x, y, z, rx, ry, rz, rw), "area": (area_id:Int)}}
+        self.markers = {}       # {marker_id: {"current_id": Int, "pose": (x, y, z, rx, ry, rz, rw), "status": str}}
         
-        # self.goal_sub = rospy.Subscriber("/customized_goal", Point, self.goal_callback)
-        # self.pose_sub = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
+        # self.robots["tb3_1"] = {"pose": None, "mission": None, "status": STATUS_WAIT, "goal": None}
+        # self.robots["tb3_2"] = deepcopy(self.robots["tb3_1"])
         
-        # self.pose_sub = rospy.Subscriber("/gazebo/link_states", LinkStates, self.pose_callback)
+        self.area_list[SUBMISSION_AREA] = {"enter_pos": (0.0, -1.5, 0.0, 0.0, 0.0, 1.0, 0.0), "cube_number":-1}
+        self.area_list[STORE_AREA_1] = {"enter_pos": (1.625, -1.0, 0.0, 0.0, 0.0, -0.707, 0.707), "cube_number":-1}
+        self.area_list[STORE_AREA_2] = {"enter_pos": (-1.25, -0.75, 0.0, 0.0, 0.0, -0.707, 0.707), "cube_number":-1}
+        self.area_list[STORE_AREA_3] = {"enter_pos": (-1.25, 1.25, 0.0, 0.0, 0.0, 1.0, 0.0), "cube_number":-1}
         
-        self.area_list = {}
-        self.cube_list = {}
-        # self.target_list = []
-        # self.area_entre_pos = [(0.0, 1.5), (1.575, 1), (-1.25, 0.5), (-1, -1.25)]
+        self.mission_pub = rospy.Publisher("/missions", String, queue_size=10) # 
         
-        self.area_list[SUBMISSION_AREA] = {"enter_pos": (0.0, -1.5), "cube_number":-1, "cube_list": []}
-        self.area_list[STORE_AREA_1] = {"enter_pos": (1.625, -1), "cube_number":-1, "cube_list": []}
-        self.area_list[STORE_AREA_2] = {"enter_pos": (-1.25, -0.75), "cube_number":-1, "cube_list": []}
-        self.area_list[STORE_AREA_3] = {"enter_pos": (-1.25, 1.25), "cube_number":-1, "cube_list": []}
-        
-        # self.cube_list[id] = {"status": str, "pose": tuple}
-        
-        self.header = Header()
-        
-        self.pose_pub = rospy.Publisher("/poses", PoseStamped, queue_size=10)
-        self.mission_pub = rospy.Publisher("/missions", String, queue_size=10) # f"{robot_name} {mission} {area}"
-        self.goal_pub = rospy.Publisher("/goals", PoseStamped, queue_size=10)
-        
-        self.pose_sub = rospy.Subscriber("/tb3/poses", PoseStamped, self.pose_callback, queue_size=10)
-        self.status_sub = rospy.Subscriber("/tb3/status", String, self.status_callback ,queue_size=10) # f"{robot_name} {status}"
+        self.info_sub = rospy.Subscriber("/tb3/info", String, self.info_callback, queue_size=10)
     
-    def pose_callback(self, msg:PoseStamped):
-        type, id, area = msg.header.frame_id.split()
-        if type == "robot":
-            try:
-                self.robots[id]["pose"] = msg.pose
-            except KeyError:
-                pass
-        elif type == "cube":
-            try:
-                self.cube_list[int(id)]["pose"]
-            except KeyError:
-                self.cube_list[int(id)] = {"status": STATUS_FOUND, "pose": Pose, "area": -1}
-            finally:
-                self.cube_list[int(id)]["pose"] = msg.pose
-                self.cube_list[int(id)]["area"] = int(area)
-    
-    def status_callback(self, msg: String):
-        l = msg.data.split()
+    def info_callback(self, msg:String):
+        # Input string: {"type": str, "id": str, "info": Dict}
+        d = json.loads(msg.data)
+        
         try:
-            self.robots[l[0]]["status"] = l[1]
+            try:
+                x, y, z, rx, ry, rz, rw = d["info"]["pose"]
+            except ValueError:
+                print("Invaild pose: ", d["info"]["pose"])
+            
+            i = d["id"]
+            if d["type"] == "robot":
+                try:
+                    self.robots[i]
+                except KeyError as e:
+                    self.robots[i] = {"pose": None, "mission": None, "status": None, "goal": None}
+                    print(f"New robot connected: {i}")
+                finally:
+                    self.robots[i]["pose"] = d["info"]["pose"]
+                    if self.robots[i]["status"] == STATUS_MISSION_PUB and d["info"]["mission"] == None:
+                        return
+                    self.robots[i]["status"] = d['info']["status"]
+                    self.robots[i]["mission"] = d["info"]["mission"]
+
+            elif d["type"] == "cube":
+                try:
+                    self.cube_list[int(i)]
+                except KeyError:
+                    self.cube_list[int(i)] = {"status": STATUS_FOUND, "pose": None, "area": int(d["info"]["area"])}
+                    self.area_list[int(d["info"]["area"])]["cube_number"] += 1
+                    print(f"New cube found: {i}")
+                finally:
+                    if d["info"]["pose"] != None: 
+                        self.cube_list[int(i)]["pose"] = d["info"]["pose"]
+                        self.cube_list[int(i)]["area"] = int(d["info"]["area"])
+                    self.cube_list[int(i)]["status"] = d["info"]["status"]
+            
+            elif d["type"] == "marker":
+                try:
+                    self.markers[int(i)]
+                except KeyError:
+                    self.markers[int(i)] = {"pose": None, "current_id": int(i), "status": STATUS_FOUND}
+                    print(f"New target found: {i}")
+                finally:
+                    self.markers[int(i)]["pose"] = d["info"]["pose"]
+                    self.markers[int(i)]["status"] = d["info"]["status"]
         except KeyError:
-            pass
+            print("Invalid message: ", msg.data)
                 
     def get_distance(self, robot, target_pos):
         robot_pose:Pose = robot["pose"]
-        x = robot_pose.position.x
-        y = robot_pose.position.y
+        x = robot_pose[0]
+        y = robot_pose[1]
         return math.sqrt((x - target_pos[0]) ** 2 + (y - target_pos[1]) ** 2)
     
     def compare_distance(self, area):
-        distances = [self.get_distance(self.robots[name], self.area_list[area]["enter_pos"]) for name in self.robots.keys()]
+        distances = [self.get_distance(self.robots[name], area) for name in self.robots.keys()]
         i = distances.index(min(distances))
-        return self.robots.keys()[i]
+        j = 0
+        for robot in self.robots.keys():
+            if i == j:
+                return robot
+            else:
+                j += 1
 
     def robot_free(self, robot):
-        if self.robots[robot] == STATUS_WAIT:
+        if self.robots[robot]["status"] == STATUS_WAIT and self.robots[robot]["mission"] == None:
             return True
         else: return False
     
     def duplicate_mission(self, mission, area):
-        return any([self.robots[name]["mission"] == (mission, area) for name in self.robots.keys()])
+        return any([self.robots[name]["mission"] == [mission, area] for name in self.robots.keys()])
         
     def mission_issue(self, mission, target_id):
         name = ""
         if mission == ACTION_EXPLOR:
-            goal_pos = self.area_list[target_id]["enter_pose"]
-        else:
-            goal_pos = self.cube_list[target_id]["pose"]
+            goal_pose = self.area_list[target_id]["enter_pos"]
+        elif mission == ACTION_PICK_UP:
+            goal_pose = self.area_list[self.cube_list[target_id]["area"]]["enter_pos"]
+        elif mission == ACTION_SUBMIT:
+            goal_pose = self.area_list[SUBMISSION_AREA]["enter_pos"]
         
-        if not self.duplicate_mission(mission, target_id):
+        if mission != ACTION_SUBMIT and not self.duplicate_mission(mission, target_id):
             if all([self.robot_free(robot) for robot in self.robots.keys()]): 
-                robot = self.compare_distance(goal_pos)
-                self.robots[robot]["mission"] = (mission, target_id)
-                name = robot
+                name = self.compare_distance(goal_pose)
             elif self.robot_free("tb3_1"): 
-                self.robots["tb3_1"]["mission"] = (mission, target_id)
                 name = "tb3_1"
             elif self.robot_free("tb3_2"): 
-                self.robots["tb3_2"]["mission"] = (mission, target_id)
                 name = "tb3_2"
             else: return False
+        elif mission == ACTION_SUBMIT:
+            for robot in self.robots.keys():
+                if self.robots[robot]["mission"] == [ACTION_SUBMIT, target_id]:
+                    name = robot
+                    break
         else: return False
         
-        s = String()
-        s.data = f"{name} {mission}"
-        self.mission_pub(s)
+        if mission != ACTION_SUBMIT:
+            self.robots[name]["mission"] = (mission, target_id)
+            self.robots[name]["status"] = STATUS_MISSION_PUB
         
-        
-        pose = PoseStamped()
-        pose.header.frame_id = name
-        pose.header.stamp = rospy.Time().now()
-        pose.pose.position.x = goal_pos[0]
-        pose.pose.position.y = goal_pos[1]
-        self.goal_pub.publish(pose)
+            s = String()
+            s.data = json.dumps({"id": name, "mission": (mission, target_id), "goal": goal_pose})
+            self.mission_pub.publish(s)
+        else: 
+            s = String()
+            s.data = json.dumps({"id": name, "mission": (mission, target_id), "goal": self.markers[target_id]["pose"]})
+            self.mission_pub.publish(s)
         
         time.sleep(1)
         return True
@@ -127,30 +147,47 @@ class MainControl:
         rate = rospy.Rate(1)
         # self.mission_start()
         while not rospy.is_shutdown():
-            for robot in self.robots.keys():
-                print(f"{robot} status:", self.robots[robot]["pose"], self.robots[robot]["mission"])
+            rate.sleep()
             
-            # self.tb3_1.other_robot_pose = self.tb3_2.get_pose()
-            # self.tb3_2.other_robot_pose = self.tb3_1.get_pose()
+            if len(self.robots) < self.robot_num:
+                print(f"No enough robot to start. Current robot: {len(self.robots)}, expect: {self.robot_num}")
+                continue
             
-            if self.area_list[SUBMISSION_AREA]["cube_number"] != 3:
+            # for robot in self.robots.keys():
+            #     m = self.robots[robot]["mission"]
+            #     s = self.robots[robot]["status"]
+            #     print(f"{robot} mission: {m} status: {s}")
+            
+            if len(self.markers) != 3:
                 self.mission_issue(ACTION_EXPLOR, SUBMISSION_AREA)
             else:
-                for i in self.area_list[SUBMISSION_AREA]["cube_list"]:
+                for i in self.markers.keys():
                     try:
                         if self.cube_list[i]["status"] == STATUS_FOUND:
-                            mission_issuelished = self.mission_issue(ACTION_PICK_UP, i)
-                            if mission_issuelished:
+                            mission_published = self.mission_issue(ACTION_PICK_UP, i)
+                            if mission_published:
                                 self.cube_list[i]["status"] = STATUS_SELECTED
+                        elif self.cube_list[i]["status"] == STATUS_PICKED:
+                            self.mission_issue(ACTION_SUBMIT, i)
                     except KeyError:
+                        print("Invalid target")
                         continue
             
             for i in range(1, 4):
                 if self.area_list[i]["cube_number"] == -1:
-                    mission_issuelished = self.mission_issue(ACTION_EXPLOR, i)
-                    if mission_issuelished:
+                    mission_published = self.mission_issue(ACTION_EXPLOR, i)
+                    if mission_published:
                         self.area_list[i]["cube_number"] = 0
-                elif len(self.cube_list) != 6 and self.area_list[i]["cube_number"] < 3:
-                    self.mission_issue(ACTION_EXPLOR, i)
             
-            rate.sleep()
+                if all([self.area_list[i]["cube_number"] >= 0 for i in range(1, 4)]) and len(self.cube_list) != 6 and self.area_list[i]["cube_number"] < 2:
+                    self.mission_issue(ACTION_EXPLOR, i)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Arguments")
+    parser.add_argument("robot_num", default=2)
+    args = parser.parse_args()
+    
+    rospy.init_node("main_control")
+    control = MainControl(int(args.robot_num))
+    control.main()

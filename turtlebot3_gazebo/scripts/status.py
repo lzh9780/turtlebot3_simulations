@@ -1,14 +1,13 @@
 ACTION_EXPLOR = "explor"
-ACTION_EXPLOR_AGAIN = "explor_again"
 ACTION_PICK_UP = "pick_up"
 ACTION_SUBMIT = "submit"
 
+STATUS_MISSION_PUB = "mission published"
 STATUS_PLANNING = "planning"
 STATUS_WAIT = "wait"
 STATUS_COMPLETE = "complete"
 STATUS_MOVING_TO = "moving"
 STATUS_ARRIVE = "arrive"
-STATUS_REACHING = "reaching"
 
 STATUS_FOUND = "found"
 STATUS_SELECTED = "selected"

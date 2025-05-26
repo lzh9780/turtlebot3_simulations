@@ -2,7 +2,7 @@
     <arg name="use_sim_time" value="true"/>
   
     <arg name="model" default="waffle_pi" doc="model type [burger, waffle, waffle_pi]"/>
-    <arg name="move_forward_only" default="false"/>
+    <arg name="move_forward_only" default="true"/>
   
     <!-- turtle bot declation -->
     <arg name='first_tb3' default="tb3_1"/>
