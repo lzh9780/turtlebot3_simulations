@@ -238,10 +238,18 @@ class TurtlebotController:
             elif self.goal_status != None and self.goal_status.status != 1:
                 self.move_to_position()
         elif self.status == STATUS_ARRIVE:
-            self.twist_pub(0, -0.2)
-            time.sleep(5)
-            self.twist_pub(0, 0.2)
-            time.sleep(10)
+            start_time = time.time()
+            while time.time() - start_time < 15:
+                if self.curr_mission[1] == SUBMISSION_AREA:
+                    self.detection(0.09)
+                else:
+                    self.detection(0.045)
+                
+                if time.time() - start_time < 5:
+                    self.twist_pub(0, -0.2)
+                else: 
+                    self.twist_pub(0, 0.2)
+            
             self.twist_pub(0, 0)
             self.set_status(STATUS_COMPLETE)
         elif self.status == STATUS_COMPLETE:
@@ -260,30 +268,33 @@ class TurtlebotController:
             elif self.goal_status != None and self.goal_status.status != 1:
                 self.move_to_position()
         elif self.status == STATUS_ARRIVE:
-            self.detection(0.045)
-            try:
-                target_pose = self.cube_pose[cube_id]
+            # self.detection(0.045)
+            # try:
+            #     target_pose = self.cube_pose[cube_id]
                 # x, y = self.move_toward_origin(target_pose[0], target_pose[1])
-                yaw = math.atan2(target_pose[1], target_pose[0])
-                if yaw > 0.01:
-                    self.twist_pub(0, yaw)
-                    return
+                # yaw = math.atan2(target_pose[1], target_pose[0])
+                # if yaw > 0.01:
+                #     self.twist_pub(0, yaw)
+                #     return
                 
-                if math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) > 0.22:
-                    self.twist_pub(math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) / 5, 0)
-                    return
+                # if math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) > 0.22:
+                #     self.twist_pub(math.sqrt(target_pose[0] ** 2 + target_pose[1] ** 2) / 5, 0)
+                #     return
+
+                # self.twist_pub(0, 0)
                 
-            except KeyError:
-                print("Target not found")
-                self.detection(0.045)
-            finally:
-                self.twist_pub(0, 0)
+            s = String()
+            s.data = json.dumps({"type": "cube", "id": int(cube_id), "info": {"pose": None, "area": None, "status": STATUS_PICKED}})
+            self.status_pub.publish(s)
+            
+            self.set_mission((ACTION_SUBMIT, cube_id))
+            self.set_status(STATUS_PLANNING)
+            self.set_goal(None)
                 
-                s = String()
-                s.data = json.dumps({"type": "cube", "id": int(cube_id), "info": {"pose": None, "area": None, "status": STATUS_PICKED}})
-                self.status_pub.publish(s)
+            # except KeyError:
+            #     print("Target not found")
+            #     self.detection(0.045)
                 
-                self.set_mission((ACTION_SUBMIT, cube_id))
                             
         # if target["status"] == STATUS_SELECTED:
         #     x = target["pose"][0] - self.curr_pose[0]
@@ -329,11 +340,6 @@ class TurtlebotController:
         rate = rospy.Rate(10)
         while not rospy.is_shutdown():
             rate.sleep()
-
-            if self.inside_area == SUBMISSION_AREA:
-                self.detection(0.09)
-            else:
-                self.detection(0.045)
 
             if self.curr_mission == None:
                 pass

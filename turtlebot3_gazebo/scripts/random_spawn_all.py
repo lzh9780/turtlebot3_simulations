@@ -29,16 +29,7 @@ def spawn_random_textured_model():
             target_list.append(n)
     
     print(num_list, target_list)
-    
-    # Use block to generate, range is (4, 4) to (-3, -3)
-    # Use center of block, x = bx[0] * 0.5 - 0.25, y = by[0] * 0.5 - 0.25
-    # Range to generate is x +/- 0.2, y +/- 0.2
-    
-    # Change to not generate in some block
-    # area 2: (-2, -2)
-    # area 3: (-2, 2)
-    
-    # List of three object ranges. Each range shows as [min_x, min_y, max_x, max_y]
+
     pose_range_list = [[1.05, -1.95, 1.95, -1.3], [-1.95, -1.95, -1.05, -0.55], [-1.95, 0.55, -1.05, 1.95]]
     
     rospack = rospkg.RosPack()

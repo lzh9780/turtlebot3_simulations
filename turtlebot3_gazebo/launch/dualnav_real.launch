@@ -1,25 +1,25 @@
 <launch>
-
-    <arg name="use_sim_time" value="true"/>
+    <arg name="use_sim_time" value="false"/>
   
     <arg name="model" default="waffle_pi" doc="model type [burger, waffle, waffle_pi]"/>
     <arg name="move_forward_only" default="false"/>
   
     <!-- turtle bot declation -->
     <arg name='first_tb3' default="tb3_1"/>
-    <arg name="first_tb3_x_pos" default="-1.0"/>
+    <arg name="first_tb3_x_pos" default="1.6"/>
     <arg name="first_tb3_y_pos" default="0.0"/>
-    <arg name="first_tb3_z_pos" default=" 0.02"/>
-    <arg name="first_tb3_yaw"   default=" 0.0"/>
+    <arg name="first_tb3_z_pos" default=" 0.0"/>
+    <arg name="first_tb3_yaw"   default=" 3.14"/>
   
     <arg name='second_tb3' default="tb3_2"/>
-    <arg name="second_tb3_x_pos" default=" 0.0"/>
-    <arg name="second_tb3_y_pos" default=" 0.0"/>
-    <arg name="second_tb3_z_pos" default=" 0.02"/>
-    <arg name="second_tb3_yaw"   default=" 0.0"/>
-   
+    <arg name="second_tb3_x_pos" default=" 0.5"/>
+    <arg name="second_tb3_y_pos" default=" 1.6"/>
+    <arg name="second_tb3_z_pos" default=" 0.0"/>
+    <arg name="second_tb3_yaw"   default=" -1.57"/>
+  
+  
     <node pkg="tf" type="static_transform_publisher" name="world_to_mergedmap_tf_broadcaster"  
-          args="0.385 0.385 0 0 0 0 world map 20"/>
+          args="0 0 0 0 0 0 world map 20"/>
   
     <node pkg="tf" type="static_transform_publisher" name="world_to_$(arg first_tb3)_tf_broadcaster11"  
           args="0 0 0 0 0 0 /map /$(arg first_tb3)/map 20"/>
@@ -27,21 +27,21 @@
     <node pkg="tf" type="static_transform_publisher" name="world_to_$(arg second_tb3)_tf_broadcaster" 
           args="0 0 0 0 0 0 /map /$(arg second_tb3)/map 20"/>  
   
-    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <!-- <include file="$(find gazebo_ros)/launch/empty_world.launch">
       <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/wall.world"/>
       <arg name="paused" value="false"/>
       <arg name="use_sim_time" value="true"/>
       <arg name="gui" value="true"/>
       <arg name="headless" value="false"/>
       <arg name="debug" value="false"/>
-    </include>
+    </include> -->
   
-      <arg name="map" default="multimap.yaml" />
-      <node name="map_server" pkg="map_server" type="map_server" args="$(find nav_pkg)/map/$(arg map)"/>
+      <arg name="map" default="map.yaml" />
+      <node name="map_server" pkg="map_server" type="map_server" args="$(find path_planning)/maps/$(arg map)"/>
   
   <!-- ################################################################################################# -->
     <group ns = "$(arg first_tb3)">
-      <param name="robot_description" command="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro botname:=$(arg first_tb3)" />
+      <!-- <param name="robot_description" command="$(find xacro)/xacro $(find path_planning)/urdf/turtlebot3_waffle_pi.urdf.xacro botname:=$(arg first_tb3)" />
   
       <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
         <param name="publish_frequency" type="double" value="50.0" />
@@ -49,7 +49,9 @@
       </node>
   
       <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-urdf -model $(arg first_tb3) -x $(arg first_tb3_x_pos) -y $(arg first_tb3_y_pos) -z $(arg first_tb3_z_pos) -Y $(arg first_tb3_yaw) -param robot_description" />
+   -->
   
+      <node pkg="map_server" name="map_server" type="map_server" args="$(find path_planning)/maps/$(arg map)"/>
       <node pkg="amcl" type="amcl" name="amcl">
           <param name="use_map_topic"             value="true"/>
           <param name="odom_model_type"           value="diff"/>
@@ -82,13 +84,13 @@
           <param name="transform_tolerance"       value="1.0"/>
           <param name="recovery_alpha_slow"       value="0.0"/>
           <param name="recovery_alpha_fast"       value="0.0"/>
-          <param name="initial_pose_x"            value="$(arg first_tb3_x_pos)"/>
-          <param name="initial_pose_y"            value="$(arg first_tb3_y_pos)"/>
-          <param name="initial_pose_a"            value="$(arg first_tb3_yaw)"/>
+          <param name="initial_pose_x"            value="0.0"/>
+          <param name="initial_pose_y"            value="-0.95"/>
+          <param name="initial_pose_a"            value="0.0"/>
           <remap from="scan"                      to="/$(arg first_tb3)/scan"/>
         </node>
   
-      <include file="$(find turtlebot3_gazebo)/launch//move_base.launch">
+      <include file="$(find path_planning)/launch/includes/move_base.launch">
         <arg name="model" value="$(arg model)" />
         <arg name="move_forward_only" value="$(arg move_forward_only)"/>
         <arg name="cmd_vel_topic" value="/$(arg first_tb3)/cmd_vel"/>
@@ -98,15 +100,17 @@
   
   <!-- ################################################################################################# -->
     <group ns = "$(arg second_tb3)">
-      <param name="robot_description" command="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro botname:=$(arg second_tb3)" />
+      <!-- <param name="robot_description" command="$(find xacro)/xacro $(find path_planning)/urdf/turtlebot3_waffle_pi.urdf.xacro botname:=$(arg second_tb3)" />
   
       <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
         <param name="publish_frequency" type="double" value="50.0" />
         <param name="tf_prefix" value="$(arg second_tb3)" />
       </node>
   
-      <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-urdf -model $(arg second_tb3) -x $(arg second_tb3_x_pos) -y $(arg second_tb3_y_pos) -z $(arg second_tb3_z_pos) -Y $(arg second_tb3_yaw) -param robot_description" />
-    
+      <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-urdf -model $(arg second_tb3) -x $(arg second_tb3_x_pos) -y $(arg second_tb3_y_pos) -z $(arg second_tb3_z_pos) -Y $(arg second_tb3_yaw) -param robot_description" /> -->
+  
+      <node pkg="map_server" name="map_server" type="map_server" args="$(find path_planning)/maps/$(arg map)"/>
+  
       <node pkg="amcl" type="amcl" name="amcl">
           <param name="use_map_topic"             value="true"/>
           <param name="odom_model_type"           value="diff"/>
@@ -139,19 +143,24 @@
           <param name="transform_tolerance"       value="1.0"/>
           <param name="recovery_alpha_slow"       value="0.0"/>
           <param name="recovery_alpha_fast"       value="0.0"/>
-          <param name="initial_pose_x"            value="$(arg second_tb3_x_pos)"/>
-          <param name="initial_pose_y"            value="$(arg second_tb3_y_pos)"/>
-          <param name="initial_pose_a"            value="$(arg second_tb3_yaw)"/>
+          <param name="initial_pose_x"            value="0.0"/>
+          <param name="initial_pose_y"            value="0.0"/>
+          <param name="initial_pose_a"            value="0.0"/>
           <remap from="scan"                      to="/$(arg second_tb3)/scan"/>
         </node>
   
-      <include file="$(find turtlebot3_gazebo)/launch//move_base.launch">
+      <include file="$(find path_planning)/launch/includes/move_base.launch">
         <arg name="model" value="$(arg model)" />
         <arg name="move_forward_only" value="$(arg move_forward_only)"/>
         <arg name="cmd_vel_topic" value="/$(arg second_tb3)/cmd_vel"/>
         <arg name="namespace" value="$(arg second_tb3)"/>
       </include>
     </group>
-
+    
   
-  </launch>
+    <!-- <node pkg="turtlebot3_gazebo" type="random_spawn_all.py" name="random_spawn_all" output="screen" /> -->
+  
+      <node pkg="rviz" type="rviz" name="rviz" required="true"
+          args="-d $(find path_planning)/rviz/my_multi1.rviz"/>
+  
+  </launch> 

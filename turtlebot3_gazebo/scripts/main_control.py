@@ -37,9 +37,11 @@ class MainControl:
         
         try:
             try:
-                x, y, z, rx, ry, rz, rw = d["info"]["pose"]
+                if d["info"]["pose"] != None:
+                    x, y, z, rx, ry, rz, rw = d["info"]["pose"]
             except (ValueError, TypeError):
                 print("Invaild pose: ", d["info"]["pose"])
+                print("message: ", d)
             
             i = d["id"]
             if d["type"] == "robot":
@@ -109,9 +111,13 @@ class MainControl:
         if mission == ACTION_EXPLOR:
             goal_pose = self.area_list[target_id]["enter_pos"]
         elif mission == ACTION_PICK_UP:
-            goal_pose = self.area_list[self.cube_list[target_id]["area"]]["enter_pos"]
+            goal_pose = self.cube_list[target_id]["pose"]
+            goal_pose[5] = self.area_list[self.cube_list[target_id]["area"]]["enter_pos"][5]
+            goal_pose[6] = self.area_list[self.cube_list[target_id]["area"]]["enter_pos"][6]
         elif mission == ACTION_SUBMIT:
-            goal_pose = self.area_list[SUBMISSION_AREA]["enter_pos"]
+            goal_pose = self.markers[target_id]["pose"]
+            goal_pose[5] = 1.0
+            goal_pose[6] = 0.0
         
         if mission != ACTION_SUBMIT and not self.duplicate_mission(mission, target_id):
             if all([self.robot_free(robot) for robot in self.robots.keys()]): 
@@ -157,29 +163,33 @@ class MainControl:
             #     m = self.robots[robot]["mission"]
             #     s = self.robots[robot]["status"]
             #     print(f"{robot} mission: {m} status: {s}")
-            
-            if len(self.markers) != 3:
-                self.mission_issue(ACTION_EXPLOR, SUBMISSION_AREA)
-            elif len(self.cube_list) != 6:
-                for i in range(1, 4):
-                    if self.area_list[i]["cube_number"] == -1:
-                        mission_published = self.mission_issue(ACTION_EXPLOR, i)
-                        if mission_published:
-                            self.area_list[i]["cube_number"] = 0
-            
-                if all([self.area_list[i]["cube_number"] >= 0 for i in range(1, 4)]) and self.area_list[i]["cube_number"] < 2:
-                    self.mission_issue(ACTION_EXPLOR, i)
-            else:
-                for i in self.markers.keys():
-                    try:
-                        if self.cube_list[i]["status"] == STATUS_FOUND:
-                            mission_published = self.mission_issue(ACTION_PICK_UP, i)
+
+            if any([self.robot_free(robot) or self.robots[robot]["mission"][0] == ACTION_SUBMIT for robot in self.robots.keys()]):
+                if len(self.markers) != 3:
+                    self.mission_issue(ACTION_EXPLOR, SUBMISSION_AREA)
+
+                if len(self.cube_list) != 6:
+                    for i in range(1, 4):
+                        if self.area_list[i]["cube_number"] == -1:
+                            mission_published = self.mission_issue(ACTION_EXPLOR, i)
                             if mission_published:
-                                self.cube_list[i]["status"] = STATUS_SELECTED
-                        elif self.cube_list[i]["status"] == STATUS_PICKED:
-                            self.mission_issue(ACTION_SUBMIT, i)
-                    except KeyError:
-                        continue
+                                self.area_list[i]["cube_number"] = 0
+                
+                    if all([self.area_list[i]["cube_number"] >= 0 for i in range(1, 4)]) and self.area_list[i]["cube_number"] < 3:
+                        self.mission_issue(ACTION_EXPLOR, i)
+
+                if len(self.markers) > 0:
+                    for i in self.markers.keys():
+                        try:
+                            if self.cube_list[i]["status"] == STATUS_FOUND:
+                                mission_published = self.mission_issue(ACTION_PICK_UP, i)
+                                if mission_published:
+                                    self.cube_list[i]["status"] = STATUS_SELECTED
+                            elif self.cube_list[i]["status"] == STATUS_PICKED:
+                                print(f"Submitting cube {i}")
+                                self.mission_issue(ACTION_SUBMIT, i)
+                        except KeyError:
+                            continue
             
             # for i in range(1, 4):
             #     if self.area_list[i]["cube_number"] == -1:
