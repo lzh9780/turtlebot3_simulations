@@ -4,10 +4,10 @@ import rospy
 import tf
 import math 
 from std_msgs.msg import String
-from geometry_msgs.msg import Twist, Point, Pose, PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
 from sensor_msgs.msg import Image, CameraInfo
 from move_base_msgs.msg import MoveBaseActionGoal
-from actionlib_msgs.msg import GoalStatus, GoalStatusArray
+from actionlib_msgs.msg import GoalStatusArray
 from cv_bridge import CvBridge
 import time
 import numpy as np
@@ -144,9 +144,12 @@ class TurtlebotController:
         return T_optimized, R_optimized
     
     def detection(self, marker_length):
-        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-        _, frame = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-        # frame = self.image
+        robot_pose = self.curr_pose
+        image = self.image
+        if image is None:
+            return
+        
+        frame = self.image
         # detect ArUco marker
         corners, ids, _ = self.detector.detectMarkers(frame)
         self.cube_pose = {}
@@ -166,18 +169,18 @@ class TurtlebotController:
                 tvec_list = cube_dict[marker_id]
                 trans, _ = self.detect_cube_position(tvec_list, cube_size=0.05)
                 if trans is not None:
-                    rob_x_global = self.curr_pose[0]
-                    rob_y_global = self.curr_pose[1]
+                    rob_x_global = robot_pose[0]
+                    rob_y_global = robot_pose[1]
                     
                     (_, _, yaw) = tf.transformations.euler_from_quaternion(
-                        [self.curr_pose[3], self.curr_pose[4], self.curr_pose[5], self.curr_pose[6]])
+                        [robot_pose[3], robot_pose[4], robot_pose[5], robot_pose[6]])
                     rob_rot_rad = yaw
 
                     x_cam = trans[0]
                     z_cam = trans[2]
 
-                    x_base = z_cam + 0.076
-                    y_base = -x_cam + 0
+                    x_base = z_cam - 0.05
+                    y_base = -x_cam
                     
                     self.cube_pose[marker_id] = (x_base, y_base)
 
@@ -192,10 +195,10 @@ class TurtlebotController:
                     #         break
                     
                     s = String()
-                    if marker_length == 0.055:
-                        s.data = json.dumps({"type": "cube", "id": int(marker_id), "info": {"pose": (obj_x_global, obj_y_global, 0, 0, 0, 0, 1), "area": self.curr_mission[1], "status": STATUS_FOUND}})
-                    elif marker_length == 0.11:
+                    if self.curr_mission[1] == SUBMISSION_AREA:
                         s.data = json.dumps({"type": "marker", "id": int(marker_id), "info": {"pose": (obj_x_global, obj_y_global, 0, 0, 0, 1, 0), "status": STATUS_FOUND}})
+                    else:
+                        s.data = json.dumps({"type": "cube", "id": int(marker_id), "info": {"pose": (obj_x_global, obj_y_global, 0, 0, 0, 0, 1), "area": self.curr_mission[1], "status": STATUS_FOUND}})
 
                     self.status_pub.publish(s)
         
@@ -216,7 +219,7 @@ class TurtlebotController:
         self.goal_pub.publish(action_goal)
         
         if self.goal_status != None and self.goal_status.status == 1:
-                self.set_status(STATUS_MOVING_TO)
+            self.set_status(STATUS_MOVING_TO)
     
     def move_toward_origin(self, x, y, distance=0.225):
         length = math.hypot(x, y)
@@ -241,16 +244,13 @@ class TurtlebotController:
                 self.move_to_position()
         elif self.status == STATUS_ARRIVE:
             start_time = time.time()
-            while time.time() - start_time < 15:
-                if self.curr_mission[1] == SUBMISSION_AREA:
-                    self.detection(0.11)
-                else:
-                    self.detection(0.055)
+            while time.time() - start_time < 30:
+                self.detection(0.1)
                 
-                if time.time() - start_time < 5:
-                    self.twist_pub(0, -0.2)
+                if time.time() - start_time < 10:
+                    self.twist_pub(0, -0.1)
                 else: 
-                    self.twist_pub(0, 0.2)
+                    self.twist_pub(0, 0.1)
             
             self.twist_pub(0, 0)
             self.set_status(STATUS_COMPLETE)

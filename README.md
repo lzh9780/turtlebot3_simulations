@@ -147,5 +147,5 @@ roslaunch turtlebot3_gazebo 430dualnav.launch
 
 To start mission, run the command in a new terminal: 
 ```bash
-roslaunch turtlebot3_gazebo multi_robot_controllor.launch
+roslaunch turtlebot3_gazebo multi_robot_controllor_real.launch
 ```
