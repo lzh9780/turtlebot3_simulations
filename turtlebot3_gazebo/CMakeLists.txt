@@ -100,6 +100,12 @@ catkin_package()
 catkin_install_python(PROGRAMS
   scripts/pose_broadcaster.py
   scripts/aruco_test.py
+  scripts/robot_controllor.py
+  scripts/robot_controllor_real.py
+  scripts/main_control.py
+  scripts/main_control_real.py
+  scripts/gui.py
+  scripts/status.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 ACTION_EXPLOR = "explor"
 ACTION_PICK_UP = "pick_up"
 ACTION_SUBMIT = "submit"

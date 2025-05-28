@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
-from status import *
+from turtlebot3_simulations.turtlebot3_gazebo.scripts.status import *
 import math
 import rospy
 from geometry_msgs.msg import Pose
@@ -204,7 +204,7 @@ class MainControl:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Arguments")
     parser.add_argument("robot_num", default=2)
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
     
     rospy.init_node("main_control")
     control = MainControl(int(args.robot_num))

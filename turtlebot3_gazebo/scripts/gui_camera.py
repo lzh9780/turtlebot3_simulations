@@ -29,7 +29,8 @@ class RosCvCameraWidget(QLabel):
 
         # ArUco 初始化
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_7X7_1000)
-        self.aruco_params = cv2.aruco.DetectorParameters_create()
+        self.detector = cv2.aruco.ArucoDetector(self.aruco_dict)
+        # self.aruco_params = cv2.aruco.DetectorParameters_create()
 
         self._start_ros_thread()
 
@@ -56,7 +57,7 @@ class RosCvCameraWidget(QLabel):
         display_img = cv_img.copy()
 
         if self.show_aruco:
-            corners, ids, _ = cv2.aruco.detectMarkers(display_img, self.aruco_dict, parameters=self.aruco_params)
+            corners, ids, _ = self.detector.detectMarkers(display_img)
             if ids is not None:
                 # 画出边框
                 cv2.aruco.drawDetectedMarkers(display_img, corners, ids)

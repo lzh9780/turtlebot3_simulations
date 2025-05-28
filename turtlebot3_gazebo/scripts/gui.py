@@ -5,9 +5,10 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import QTimer
 from datetime import datetime
-from gui_camera import RosCvCameraWidget
-from gui_map import RosMapWithRobotAndPathWidget
-from gui_aruco_recive import ArUcoIdListener
+from turtlebot3_simulations.turtlebot3_gazebo.scripts.gui_camera import RosCvCameraWidget
+from turtlebot3_simulations.turtlebot3_gazebo.scripts.gui_map import RosMapWithRobotAndPathWidget
+from turtlebot3_simulations.turtlebot3_gazebo.scripts.gui_aruco_recive import ArUcoIdListener
+import rospy
 
 
 class RobotControl(QWidget):
@@ -167,7 +168,7 @@ class MainWindow(QWidget):
         self.setWindowTitle("Monitoring System")
         self.resize(1600, 900)
         self.initUI()
-        self.aruco_listener = ArUcoIdListener(self.push_ids_to_maincontrol)
+        # self.aruco_listener = ArUcoIdListener(self.push_ids_to_maincontrol)
 
     def initUI(self):
         main_layout = QVBoxLayout()
@@ -176,8 +177,14 @@ class MainWindow(QWidget):
         map_layout = QHBoxLayout()
         self.map_view = RosMapWithRobotAndPathWidget(
             map_topic="/map",
-            path_topic="/move_base/GlobalPlanner/plan",
-            robot_topics={"TurtleBot1": "/tb1/amcl_pose", "TurtleBot2": "/tb2/amcl_pose"}
+            robot_topics={
+                "TurtleBot1": "/tb3_1/amcl_pose",
+                "TurtleBot2": "/tb3_2/amcl_pose",
+            },
+            path_topics={
+                "TurtleBot1": "/tb3_1/move_base_node/NavfnROS/plan",
+                "TurtleBot2": "/tb3_2/move_base_node/NavfnROS/plan",
+            }
         )
         self.log1 = QTextEdit(); self.log1.setReadOnly(True)
         self.log2 = QTextEdit(); self.log2.setReadOnly(True)
@@ -185,14 +192,14 @@ class MainWindow(QWidget):
         self.main_control = MainControl(self.log1)
         self.main_control.set_submit_callback(self.push_to_robot)
 
-        map_layout.addWidget(self.map_view, stretch=4)
-        map_layout.addWidget(self.main_control, stretch=2)
+        map_layout.addWidget(self.map_view, stretch=10)
+        map_layout.addWidget(self.main_control, stretch=4)
         main_layout.addLayout(map_layout)
 
         # Cameras
         cam_layout = QHBoxLayout()
-        self.cam1 = RosCvCameraWidget("/camera1/image_raw", "TurtleBot1", show_aruco=True)
-        self.cam2 = RosCvCameraWidget("/camera2/image_raw", "TurtleBot2", show_aruco=True)
+        self.cam1 = RosCvCameraWidget("tb3_1/camera/rgb/image_raw", "TurtleBot1", show_aruco=True)
+        self.cam2 = RosCvCameraWidget("tb3_2/camera/rgb/image_raw", "TurtleBot2", show_aruco=True)
         self.sel1 = RobotControl(self.log1, self.cam1, self.main_control)
         self.sel2 = RobotControl(self.log2, self.cam2, self.main_control)
 
@@ -230,6 +237,7 @@ class MainWindow(QWidget):
 
 
 if __name__ == '__main__':
+    rospy.init_node("gui")
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
