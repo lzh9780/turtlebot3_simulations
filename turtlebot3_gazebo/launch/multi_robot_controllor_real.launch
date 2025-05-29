@@ -1,8 +1,7 @@
 <launch>
 
-    <node pkg="turtlebot3_gazebo" type="main_control_real.py" name="main_control" args="2" />
-
     <node pkg="turtlebot3_gazebo" type="robot_controllor_real.py" name="robot_controllor_tb3_1" args="tb3_1" />
 
     <node pkg="turtlebot3_gazebo" type="robot_controllor_real.py" name="robot_controllor_tb3_2" args="tb3_2" />
+    
 </launch>

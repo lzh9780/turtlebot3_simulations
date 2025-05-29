@@ -63,10 +63,17 @@ To start the navigation, run the command in a new terminal:
 roslaunch turtlebot3_gazebo 430dualnav.launch
 ```
 
-To start mission, run the command in a new terminal: 
+To start the control for robots, run the command in a new terminal: 
 ```bash
 roslaunch turtlebot3_gazebo multi_robot_controllor.launch
 ```
+
+To start mission, run the command in a new terminal: 
+```bash
+cd {Your_path_to_workspace}/src/turtlebot3_simulation/turtlebot3_gazebo/scripts
+python main_control.py 2
+```
+
 After running this command, the robot will begin to execute the mission automatically. 
 
 #### Mapping in Simulator
@@ -123,6 +130,11 @@ echo "export ROS_HOSTNAME={your_ip}
 
 You can use command `ifconfig` to check your ip. Fromat should be like 192.168.0.xxx
 
+Run following command to start ROS service:
+```bash
+roscore
+```
+
 #### Bringup robot
 **The bringup informatio is foucsing on the turtlebot 02 and 10 in UTS cb11.10 lab. They are modified and different to default robot. Default robot please follow:** https://emanual.robotis.com/docs/en/platform/turtlebot3/quick-start/
 
@@ -173,6 +185,21 @@ To start mission, run the command in a new terminal:
 ```bash
 roslaunch turtlebot3_gazebo multi_robot_controllor_real.launch
 ```
+
+To start mission, run the command in a new terminal: 
+```bash
+cd {Your_path_to_workspace}/src/turtlebot3_simulation/turtlebot3_gazebo/scripts
+python main_control_real.py 2
+```
+
+### 4.4 GUI
+The GUI can be started by run the command in a new terminal: 
+```bash
+cd {Your_path_to_workspace}/src/turtlebot3_simulation/turtlebot3_gazebo/scripts
+python gui.py
+```
+
+To close the gui, please close the window created. The command line `crtl+C` won't close it. 
 
 ## 5. Subsystem specifics
 

@@ -68,6 +68,8 @@ class MainControl:
                     if d["info"]["pose"] != None: 
                         self.cube_list[int(i)]["pose"] = d["info"]["pose"]
                         self.cube_list[int(i)]["area"] = int(d["info"]["area"])
+                    if d["info"]["status"] == STATUS_SUBMITTED and self.cube_list[int(i)]["status"] != STATUS_SUBMITTED:
+                        print(f"Cube {i} submitted")
                     self.cube_list[int(i)]["status"] = d["info"]["status"]
             
             elif d["type"] == "marker":
